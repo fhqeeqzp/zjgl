@@ -17,7 +17,7 @@ class ThemeManager:
             'text_secondary': '#a6adc8',
             'accent': '#89b4fa',
             'accent_hover': '#b4befe',
-            'border': '#313244',
+            'border': '#45475a',
             'button_bg': '#45475a',
             'button_hover': '#585b70',
             'card_bg': '#313244',

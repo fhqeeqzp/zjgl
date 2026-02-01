@@ -1,7 +1,9 @@
 """
 页面组件
 """
-from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+from PyQt5.QtWidgets import (
+    QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 

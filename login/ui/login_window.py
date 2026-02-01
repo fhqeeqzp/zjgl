@@ -113,6 +113,7 @@ class LoginWindow(QMainWindow):
         self.password_input.setPlaceholderText("请输入密码")
         self.password_input.setEchoMode(QLineEdit.Password)
         self.password_input.setFixedHeight(45)
+        self.password_input.returnPressed.connect(self.on_login)  # 回车键登录
         password_layout.addWidget(self.password_input)
         right_layout.addLayout(password_layout)
 

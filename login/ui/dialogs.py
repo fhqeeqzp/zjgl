@@ -165,6 +165,130 @@ class RegisterDialog(BaseDialog):
 
         self.add_shadow()
 
+
+class ChangePasswordDialog(BaseDialog):
+    """修改密码对话框"""
+
+    def __init__(self, parent=None, username="", db_manager=None):
+        self.username = username
+        self.db_manager = db_manager
+        self.success = False
+        super().__init__(parent, "修改密码")
+        self.setFixedSize(400, 350)
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # 标题栏
+        title_bar = self.create_title_bar("修改密码")
+        layout.addWidget(title_bar)
+
+        # 内容区域
+        content_frame = QFrame()
+        content_layout = QVBoxLayout(content_frame)
+        content_layout.setContentsMargins(30, 20, 30, 15)
+        content_layout.setSpacing(15)
+
+        # 用户名显示
+        user_label = QLabel(f"当前用户: {self.username}")
+        user_label.setFont(QFont("Microsoft YaHei", 11))
+        user_label.setStyleSheet(f"color: {LoginStyles.COLORS['text_secondary']}; background: transparent;")
+        content_layout.addWidget(user_label)
+
+        # 原密码输入
+        self.old_pwd_input = self.create_input("请输入原密码")
+        self.old_pwd_input.setEchoMode(QLineEdit.Password)
+        content_layout.addWidget(self.old_pwd_input)
+
+        # 新密码输入
+        self.new_pwd_input = self.create_input("请输入新密码")
+        self.new_pwd_input.setEchoMode(QLineEdit.Password)
+        content_layout.addWidget(self.new_pwd_input)
+
+        # 确认新密码
+        self.confirm_pwd_input = self.create_input("请确认新密码")
+        self.confirm_pwd_input.setEchoMode(QLineEdit.Password)
+        self.confirm_pwd_input.returnPressed.connect(self.on_confirm)
+        content_layout.addWidget(self.confirm_pwd_input)
+
+        layout.addWidget(content_frame)
+
+        # 按钮区域
+        btn_frame = QFrame()
+        btn_layout = QHBoxLayout(btn_frame)
+        btn_layout.setContentsMargins(30, 10, 30, 20)
+        btn_layout.setSpacing(15)
+
+        self.cancel_btn = self.create_secondary_button("取消")
+        self.cancel_btn.clicked.connect(self.reject)
+
+        self.confirm_btn = self.create_primary_button("确认修改")
+        self.confirm_btn.clicked.connect(self.on_confirm)
+
+        btn_layout.addWidget(self.cancel_btn)
+        btn_layout.addWidget(self.confirm_btn)
+
+        layout.addWidget(btn_frame)
+
+        self.add_shadow()
+
+    def on_confirm(self):
+        """确认修改密码"""
+        import hashlib
+
+        old_pwd = self.old_pwd_input.text().strip()
+        new_pwd = self.new_pwd_input.text().strip()
+        confirm_pwd = self.confirm_pwd_input.text().strip()
+
+        # 验证输入
+        if not old_pwd:
+            QMessageBox.warning(self, "提示", "请输入原密码")
+            return
+
+        if not new_pwd:
+            QMessageBox.warning(self, "提示", "请输入新密码")
+            return
+
+        if new_pwd != confirm_pwd:
+            QMessageBox.warning(self, "提示", "两次输入的新密码不一致")
+            return
+
+        if len(new_pwd) < 6:
+            QMessageBox.warning(self, "提示", "新密码长度不能少于6位")
+            return
+
+        # 验证原密码并更新
+        if self.db_manager:
+            try:
+                # 验证原密码
+                old_hash = hashlib.sha256(old_pwd.encode()).hexdigest()
+                result = self.db_manager.execute_query(
+                    "SELECT * FROM users WHERE username = %s AND password_hash = %s AND status = 1",
+                    (self.username, old_hash)
+                )
+
+                if not result or len(result) == 0:
+                    QMessageBox.warning(self, "错误", "原密码错误")
+                    return
+
+                # 更新密码
+                new_hash = hashlib.sha256(new_pwd.encode()).hexdigest()
+                self.db_manager.execute_update(
+                    "UPDATE users SET password_hash = %s WHERE username = %s",
+                    (new_hash, self.username)
+                )
+
+                self.success = True
+                QMessageBox.information(self, "成功", "密码修改成功")
+                self.accept()
+
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"修改密码失败: {str(e)}")
+        else:
+            QMessageBox.warning(self, "错误", "数据库未连接")
+
     def do_register(self):
         """执行注册"""
         username = self.username_input.text().strip()
@@ -201,7 +325,7 @@ class PasswordVerifyDialog(BaseDialog):
         # 内容区域
         content_frame = QFrame()
         content_layout = QVBoxLayout(content_frame)
-        content_layout.setContentsMargins(30, 20, 30, 15)
+        content_layout.setContentsMargins(5, 5, 5, 5)
         content_layout.setSpacing(15)
 
         # 提示信息
@@ -237,17 +361,49 @@ class PasswordVerifyDialog(BaseDialog):
         self.add_shadow()
 
     def verify_password(self):
-        """验证密码"""
+        """验证密码 - 从数据库验证admin用户密码"""
         import hashlib
+        from login.data.db_manager import DatabaseManager
+        from login.data.db_config import DatabaseConfig
+        
         password = self.pwd_input.text().strip()
-        # 验证密码是否为 admin/123456
-        if password == "123456":
-            self.verified = True
-            self.accept()
+        
+        # 获取数据库配置
+        db_config = DatabaseConfig()
+        config = db_config.get_config()
+        
+        # 如果数据库已配置，从数据库验证
+        if config.get('is_configured'):
+            try:
+                db_manager = DatabaseManager(config)
+                # 计算密码哈希
+                hashed_pwd = hashlib.sha256(password.encode()).hexdigest()
+                # 查询数据库验证
+                result = db_manager.execute_query(
+                    "SELECT * FROM users WHERE username = 'admin' AND password_hash = %s AND status = 1",
+                    (hashed_pwd,)
+                )
+                
+                if result and len(result) > 0:
+                    self.verified = True
+                    self.accept()
+                else:
+                    QMessageBox.warning(self, "验证失败", "密码错误，请重试")
+                    self.pwd_input.clear()
+                    self.pwd_input.setFocus()
+            except Exception as e:
+                QMessageBox.warning(self, "验证失败", f"数据库错误: {str(e)}")
+                self.pwd_input.clear()
+                self.pwd_input.setFocus()
         else:
-            QMessageBox.warning(self, "验证失败", "密码错误，请重试")
-            self.pwd_input.clear()
-            self.pwd_input.setFocus()
+            # 数据库未配置时，使用默认密码验证
+            if password == "123456":
+                self.verified = True
+                self.accept()
+            else:
+                QMessageBox.warning(self, "验证失败", "密码错误，请重试")
+                self.pwd_input.clear()
+                self.pwd_input.setFocus()
 
 
 class DatabaseConfigDialog(BaseDialog):

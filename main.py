@@ -14,6 +14,7 @@ from ui import StyleSheetManager
 from components import TitleBar, Sidebar, StatusBar, HomePage, SettingsPage, PlaceholderPage
 from login.ui import LoginWindow
 from login.data.db_config import DatabaseConfig
+from XMGL.ui import ProjectsPage
 
 
 class MainWindow(QMainWindow):
@@ -71,7 +72,10 @@ class MainWindow(QMainWindow):
         # 创建各个页面
         self.home_page = HomePage(self.theme_manager)
         self.dashboard_page = PlaceholderPage("仪表盘", self.theme_manager)
-        self.projects_page = PlaceholderPage("项目", self.theme_manager)
+        # 从login.data.db_manager导入DatabaseManager获取数据库连接
+        from login.data.db_manager import DatabaseManager
+        db_manager = DatabaseManager(self.db_config.get_config()) if self.db_config.get_config().get('is_configured') else None
+        self.projects_page = ProjectsPage(self.theme_manager, db_manager)
         self.messages_page = PlaceholderPage("消息", self.theme_manager)
         self.settings_page = SettingsPage(self.theme_manager)
 
@@ -148,12 +152,14 @@ def main():
     # 等待登录结果
     def on_login_success():
         """登录成功回调"""
-        # 获取登录用户名
+        # 获取登录用户名和数据库管理器
         username = login_window.auth_manager.get_current_user() or "用户"
+        db_manager = login_window.auth_manager.db_manager
         login_window.close()
         main_window = MainWindow()
-        # 设置标题栏显示用户名
+        # 设置标题栏显示用户名和数据库管理器
         main_window.title_bar.set_user_name(username)
+        main_window.title_bar.set_db_manager(db_manager)
         main_window.show()
 
     # 修改登录窗口的登录成功处理

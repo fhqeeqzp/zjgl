@@ -7,16 +7,19 @@ from PyQt5.QtGui import QFont
 
 from themes import ThemeManager
 from ui import StyleSheetManager
+from login.ui.dialogs import ChangePasswordDialog
 
 
 class TitleBar(QFrame):
     """自定义标题栏"""
 
-    def __init__(self, parent=None, theme_manager=None, db_config=None):
+    def __init__(self, parent=None, theme_manager=None, db_config=None, db_manager=None, username=""):
         super().__init__(parent)
         self.parent = parent
         self.theme_manager = theme_manager
         self.db_config = db_config
+        self.db_manager = db_manager
+        self.username = username
         self.drag_pos = None
 
         self.setup_ui()
@@ -48,9 +51,11 @@ class TitleBar(QFrame):
         self.user_icon.setFont(QFont("Segoe UI Emoji", 12))
         user_layout.addWidget(self.user_icon)
 
-        # 用户名
+        # 用户名（可点击）
         self.user_name_label = QLabel("未登录")
         self.user_name_label.setFont(QFont("Microsoft YaHei", 10))
+        self.user_name_label.setCursor(Qt.PointingHandCursor)  # 鼠标手型
+        self.user_name_label.mousePressEvent = self.on_user_click  # 点击事件
         user_layout.addWidget(self.user_name_label)
 
         layout.addWidget(self.user_widget)
@@ -102,7 +107,22 @@ class TitleBar(QFrame):
 
     def set_user_name(self, username):
         """设置显示的用户名"""
+        self.username = username
         self.user_name_label.setText(username)
+
+    def set_db_manager(self, db_manager):
+        """设置数据库管理器"""
+        self.db_manager = db_manager
+
+    def on_user_click(self, event):
+        """点击用户名 - 弹出修改密码对话框"""
+        if self.username and self.username != "未登录":
+            dialog = ChangePasswordDialog(
+                parent=self.parent,
+                username=self.username,
+                db_manager=self.db_manager
+            )
+            dialog.exec_()
 
     def toggle_maximize(self):
         """切换最大化/还原"""
