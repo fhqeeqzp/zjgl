@@ -1,9 +1,10 @@
 """
 登录窗口
+使用 QFluentWidgets 组件
 """
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QFrame, QVBoxLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QCheckBox, QMessageBox,
+    QLabel, QCheckBox, QMessageBox,
     QGraphicsDropShadowEffect, QSpacerItem, QSizePolicy
 )
 from PyQt5.QtCore import Qt, QSize
@@ -12,6 +13,9 @@ from PyQt5.QtGui import QColor, QFont, QPixmap
 from .styles import LoginStyles
 from ..logic.auth_manager import AuthManager
 from ..data.db_config import DatabaseConfig
+from ui.fluent_widgets import (
+    LineEdit, PasswordLineEdit, PrimaryPushButton, PushButton
+)
 
 
 class LoginWindow(QMainWindow):
@@ -93,9 +97,8 @@ class LoginWindow(QMainWindow):
         self.username_label = username_label
         username_layout.addWidget(username_label)
 
-        self.username_input = QLineEdit()
+        self.username_input = LineEdit()
         self.username_input.setPlaceholderText("请输入用户名")
-        self.username_input.setFixedHeight(45)
         username_layout.addWidget(self.username_input)
         right_layout.addLayout(username_layout)
 
@@ -109,10 +112,8 @@ class LoginWindow(QMainWindow):
         self.password_label = password_label
         password_layout.addWidget(password_label)
 
-        self.password_input = QLineEdit()
+        self.password_input = PasswordLineEdit()
         self.password_input.setPlaceholderText("请输入密码")
-        self.password_input.setEchoMode(QLineEdit.Password)
-        self.password_input.setFixedHeight(45)
         self.password_input.returnPressed.connect(self.on_login)  # 回车键登录
         password_layout.addWidget(self.password_input)
         right_layout.addLayout(password_layout)
@@ -125,8 +126,7 @@ class LoginWindow(QMainWindow):
 
         remember_layout.addStretch()
 
-        forgot_btn = QPushButton("忘记密码?")
-        forgot_btn.setCursor(Qt.PointingHandCursor)
+        forgot_btn = PushButton("忘记密码?")
         forgot_btn.clicked.connect(self.on_forgot_password)
         self.forgot_btn = forgot_btn
         remember_layout.addWidget(forgot_btn)
@@ -145,15 +145,11 @@ class LoginWindow(QMainWindow):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(15)
 
-        self.login_btn = QPushButton("登 录")
-        self.login_btn.setFixedHeight(45)
-        self.login_btn.setCursor(Qt.PointingHandCursor)
+        self.login_btn = PrimaryPushButton("登 录")
         self.login_btn.clicked.connect(self.on_login)
         btn_layout.addWidget(self.login_btn)
 
-        self.register_btn = QPushButton("注 册")
-        self.register_btn.setFixedHeight(45)
-        self.register_btn.setCursor(Qt.PointingHandCursor)
+        self.register_btn = PushButton("注 册")
         self.register_btn.clicked.connect(self.on_register)
         btn_layout.addWidget(self.register_btn)
 
@@ -165,8 +161,7 @@ class LoginWindow(QMainWindow):
         db_config_layout = QHBoxLayout()
         db_config_layout.setSpacing(10)
         
-        db_config_btn = QPushButton("数据库配置")
-        db_config_btn.setCursor(Qt.PointingHandCursor)
+        db_config_btn = PushButton("数据库配置")
         db_config_btn.clicked.connect(self.on_db_config)
         self.db_config_btn = db_config_btn
         db_config_layout.addWidget(db_config_btn)

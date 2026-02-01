@@ -5,7 +5,7 @@
 
 
 class ThemeManager:
-    """主题管理器 - 同时管理深色和浅色主题"""
+    """主题管理器 - 同时管理深色和浅色主题，并同步QFluentWidgets主题"""
 
     THEMES = {
         'dark': {
@@ -55,12 +55,24 @@ class ThemeManager:
         return self.current_theme
 
     def switch_theme(self, theme_name):
-        """切换主题"""
+        """切换主题并同步到QFluentWidgets"""
         if theme_name in self.THEMES and theme_name != self.current_theme:
             self.current_theme = theme_name
+            # 同步QFluentWidgets主题
+            self._sync_fluent_theme()
             self._notify_observers()
             return True
         return False
+
+    def _sync_fluent_theme(self):
+        """同步主题到QFluentWidgets"""
+        try:
+            from ui.fluent_widgets import FluentComponentAdapter
+            theme_dict = self.get_theme()
+            FluentComponentAdapter.apply_theme_to_fluent(theme_dict)
+        except ImportError:
+            # QFluentWidgets未安装时跳过
+            pass
 
     def toggle_theme(self):
         """切换主题（深色/浅色之间切换）"""

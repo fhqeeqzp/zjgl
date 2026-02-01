@@ -1,10 +1,10 @@
 """
 项目管理页面
-提供项目管理的用户界面
+提供项目管理的用户界面 - 使用 QFluentWidgets 组件
 """
 from PyQt5.QtWidgets import (
-    QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QWidget, QLineEdit, QTableWidget, QTableWidgetItem,
+    QFrame, QVBoxLayout, QHBoxLayout, QLabel,
+    QWidget, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QMessageBox, QMenu,
     QAction, QDialog
 )
@@ -14,6 +14,7 @@ from PyQt5.QtGui import QFont
 from ..logic.project_manager import ProjectManager
 from .project_dialog import ProjectDialog
 from ui import StyleSheetManager
+from ui.fluent_widgets import PushButton, PrimaryPushButton, SearchLineEdit
 
 
 class ProjectsPage(QFrame):
@@ -84,26 +85,21 @@ class ProjectsPage(QFrame):
         layout.addStretch()
         
         # 搜索框
-        self.search_input = QLineEdit()
+        self.search_input = SearchLineEdit()
         self.search_input.setPlaceholderText("搜索项目编码或名称...")
         self.search_input.setFixedWidth(250)
-        self.search_input.setFixedHeight(35)
         self.search_input.returnPressed.connect(self.on_search)
         layout.addWidget(self.search_input)
-        
+
         # 搜索按钮
-        self.search_btn = QPushButton("🔍 搜索")
-        self.search_btn.setFixedHeight(35)
-        self.search_btn.setCursor(Qt.PointingHandCursor)
+        self.search_btn = PushButton("🔍 搜索")
         self.search_btn.clicked.connect(self.on_search)
         layout.addWidget(self.search_btn)
-        
+
         layout.addSpacing(15)
-        
+
         # 新建项目按钮
-        self.new_btn = QPushButton("➕ 新建项目")
-        self.new_btn.setFixedHeight(35)
-        self.new_btn.setCursor(Qt.PointingHandCursor)
+        self.new_btn = PrimaryPushButton("➕ 新建项目")
         self.new_btn.clicked.connect(self.on_new_project)
         layout.addWidget(self.new_btn)
         

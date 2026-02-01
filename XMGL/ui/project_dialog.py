@@ -1,18 +1,21 @@
 """
 项目编辑对话框
-用于新建和编辑项目信息
+用于新建和编辑项目信息 - 使用 QFluentWidgets 组件
 """
 from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QComboBox, QDoubleSpinBox, QDateEdit, QTextEdit,
-    QPushButton, QFormLayout, QGroupBox, QMessageBox,
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+    QFormLayout, QGroupBox, QMessageBox,
     QFileDialog, QWidget, QGridLayout, QFrame
 )
-from PyQt5.QtCore import Qt, QDate
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 
 from ..logic.project_manager import ProjectManager
 from ui import StyleSheetManager
+from ui.fluent_widgets import (
+    LineEdit, ComboBox, DoubleSpinBox, DateEdit, TextEdit,
+    PushButton, PrimaryPushButton
+)
 
 
 class ProjectDialog(QDialog):
@@ -106,13 +109,13 @@ class ProjectDialog(QDialog):
         form_layout.setContentsMargins(30, 10, 30, 0)
 
         # 项目编码
-        self.code_input = QLineEdit()
+        self.code_input = LineEdit()
         self.code_input.setPlaceholderText("留空自动生成")
         self.code_input.setReadOnly(True)
 
         code_layout = QHBoxLayout()
         code_layout.addWidget(self.code_input)
-        self.manual_code_check = QPushButton("手动输入")
+        self.manual_code_check = PushButton("手动输入")
         self.manual_code_check.setCheckable(True)
         self.manual_code_check.setFixedWidth(80)
         self.manual_code_check.clicked.connect(self.on_manual_code_toggle)
@@ -121,17 +124,17 @@ class ProjectDialog(QDialog):
         form_layout.addRow("项目编码:", code_layout)
 
         # 项目名称
-        self.name_input = QLineEdit()
+        self.name_input = LineEdit()
         self.name_input.setPlaceholderText("请输入项目名称")
         form_layout.addRow("* 项目名称:", self.name_input)
 
         # 项目类型
-        self.type_combo = QComboBox()
+        self.type_combo = ComboBox()
         self.type_combo.addItems(self.project_manager.get_type_list())
         form_layout.addRow("项目类型:", self.type_combo)
 
         # 项目状态
-        self.status_combo = QComboBox()
+        self.status_combo = ComboBox()
         self.status_combo.addItems(self.project_manager.get_status_list())
         form_layout.addRow("项目状态:", self.status_combo)
 
@@ -140,30 +143,22 @@ class ProjectDialog(QDialog):
         amount_layout = QGridLayout(amount_group)
         amount_layout.setSpacing(10)
 
-        self.bid_spin = QDoubleSpinBox()
-        self.bid_spin.setRange(0, 9999999999.99)
-        self.bid_spin.setDecimals(2)
+        self.bid_spin = DoubleSpinBox()
         self.bid_spin.setPrefix("¥ ")
         amount_layout.addWidget(QLabel("投标金额:"), 0, 0)
         amount_layout.addWidget(self.bid_spin, 0, 1)
 
-        self.contract_spin = QDoubleSpinBox()
-        self.contract_spin.setRange(0, 9999999999.99)
-        self.contract_spin.setDecimals(2)
+        self.contract_spin = DoubleSpinBox()
         self.contract_spin.setPrefix("¥ ")
         amount_layout.addWidget(QLabel("合同金额:"), 0, 2)
         amount_layout.addWidget(self.contract_spin, 0, 3)
 
-        self.received_spin = QDoubleSpinBox()
-        self.received_spin.setRange(0, 9999999999.99)
-        self.received_spin.setDecimals(2)
+        self.received_spin = DoubleSpinBox()
         self.received_spin.setPrefix("¥ ")
         amount_layout.addWidget(QLabel("实收金额:"), 1, 0)
         amount_layout.addWidget(self.received_spin, 1, 1)
 
-        self.paid_spin = QDoubleSpinBox()
-        self.paid_spin.setRange(0, 9999999999.99)
-        self.paid_spin.setDecimals(2)
+        self.paid_spin = DoubleSpinBox()
         self.paid_spin.setPrefix("¥ ")
         amount_layout.addWidget(QLabel("实付金额:"), 1, 2)
         amount_layout.addWidget(self.paid_spin, 1, 3)
@@ -177,17 +172,13 @@ class ProjectDialog(QDialog):
 
         start_layout = QHBoxLayout()
         start_layout.addWidget(QLabel("开始日期:"))
-        self.start_date = QDateEdit()
-        self.start_date.setCalendarPopup(True)
-        self.start_date.setDate(QDate.currentDate())
+        self.start_date = DateEdit()
         start_layout.addWidget(self.start_date)
         date_layout.addLayout(start_layout)
 
         end_layout = QHBoxLayout()
         end_layout.addWidget(QLabel("竣工日期:"))
-        self.completion_date = QDateEdit()
-        self.completion_date.setCalendarPopup(True)
-        self.completion_date.setDate(QDate.currentDate())
+        self.completion_date = DateEdit()
         end_layout.addWidget(self.completion_date)
         date_layout.addLayout(end_layout)
 
@@ -201,20 +192,20 @@ class ProjectDialog(QDialog):
 
         bid_file_layout = QHBoxLayout()
         bid_file_layout.addWidget(QLabel("投标附件:"))
-        self.bid_attachment = QLineEdit()
+        self.bid_attachment = LineEdit()
         self.bid_attachment.setReadOnly(True)
         bid_file_layout.addWidget(self.bid_attachment)
-        self.bid_file_btn = QPushButton("选择文件")
+        self.bid_file_btn = PushButton("选择文件")
         self.bid_file_btn.clicked.connect(lambda: self.select_file("bid"))
         bid_file_layout.addWidget(self.bid_file_btn)
         attachment_layout.addLayout(bid_file_layout)
 
         construction_file_layout = QHBoxLayout()
         construction_file_layout.addWidget(QLabel("施工附件:"))
-        self.construction_attachment = QLineEdit()
+        self.construction_attachment = LineEdit()
         self.construction_attachment.setReadOnly(True)
         construction_file_layout.addWidget(self.construction_attachment)
-        self.construction_file_btn = QPushButton("选择文件")
+        self.construction_file_btn = PushButton("选择文件")
         self.construction_file_btn.clicked.connect(lambda: self.select_file("construction"))
         construction_file_layout.addWidget(self.construction_file_btn)
         attachment_layout.addLayout(construction_file_layout)
@@ -222,7 +213,7 @@ class ProjectDialog(QDialog):
         form_layout.addRow(attachment_group)
 
         # 备注
-        self.remark_input = QTextEdit()
+        self.remark_input = TextEdit()
         self.remark_input.setPlaceholderText("请输入备注信息...")
         self.remark_input.setMaximumHeight(80)
         form_layout.addRow("备注:", self.remark_input)
@@ -235,16 +226,13 @@ class ProjectDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
-        self.cancel_btn = QPushButton("取消")
-        self.cancel_btn.setFixedSize(100, 40)
+        self.cancel_btn = PushButton("取消")
         self.cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(self.cancel_btn)
 
         btn_layout.addSpacing(20)
 
-        self.save_btn = QPushButton("保存")
-        self.save_btn.setFixedSize(100, 40)
-        self.save_btn.setDefault(True)
+        self.save_btn = PrimaryPushButton("保存")
         self.save_btn.clicked.connect(self.on_save)
         btn_layout.addWidget(self.save_btn)
 
