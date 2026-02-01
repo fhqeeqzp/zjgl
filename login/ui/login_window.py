@@ -1,16 +1,15 @@
 """
 登录窗口
-使用 QFluentWidgets 组件
+使用 QFluentWidgets 组件，支持 QSS 主题
 """
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QMainWindow, QWidget, QFrame, QVBoxLayout, QHBoxLayout,
     QLabel, QCheckBox, QMessageBox,
     QGraphicsDropShadowEffect, QSpacerItem, QSizePolicy
 )
-from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtGui import QColor, QFont, QPixmap
+from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QColor, QFont, QPixmap
 
-from .styles import LoginStyles
 from ..logic.auth_manager import AuthManager
 from ..data.db_config import DatabaseConfig
 from ui.fluent_widgets import (
@@ -19,18 +18,21 @@ from ui.fluent_widgets import (
 
 
 class LoginWindow(QMainWindow):
-    """登录窗口"""
+    """登录窗口 - 使用 QSS 主题"""
 
-    def __init__(self):
+    def __init__(self, theme_manager=None):
         super().__init__()
 
         # 初始化数据库配置
         self.db_config = DatabaseConfig()
         # 初始化认证管理器，传入数据库配置
         self.auth_manager = AuthManager(self.db_config.get_config())
+        
+        # 主题管理器
+        self.theme_manager = theme_manager
 
         self.setup_ui()
-        self.apply_styles()
+        # 不再调用 apply_styles，使用全局 QSS
 
     def setup_ui(self):
         """设置UI"""
@@ -52,6 +54,7 @@ class LoginWindow(QMainWindow):
         # 左侧图片区域（占3份）
         left_panel = QFrame()
         left_panel.setFixedWidth(540)  # 900 * 3/5 = 540
+        left_panel.setObjectName("leftPanel")
         self.left_panel = left_panel
 
         left_layout = QVBoxLayout(left_panel)
@@ -68,6 +71,7 @@ class LoginWindow(QMainWindow):
         # 右侧表单区域（占2份）
         right_panel = QFrame()
         right_panel.setFixedWidth(360)  # 900 * 2/5 = 360
+        right_panel.setObjectName("rightPanel")
         self.right_panel = right_panel
 
         right_layout = QVBoxLayout(right_panel)
@@ -78,12 +82,14 @@ class LoginWindow(QMainWindow):
         title_label = QLabel("欢迎回来")
         title_label.setFont(QFont("Microsoft YaHei", 24, QFont.Bold))
         title_label.setAlignment(Qt.AlignCenter)
+        title_label.setObjectName("titleLabel")
         self.title_label = title_label
         right_layout.addWidget(title_label)
 
         subtitle_label = QLabel("请登录您的账户")
         subtitle_label.setFont(QFont("Microsoft YaHei", 12))
         subtitle_label.setAlignment(Qt.AlignCenter)
+        subtitle_label.setObjectName("subtitleLabel")
         self.subtitle_label = subtitle_label
         right_layout.addWidget(subtitle_label)
 
@@ -94,6 +100,7 @@ class LoginWindow(QMainWindow):
         username_label = QLabel("用户名:")
         username_label.setFont(QFont("Microsoft YaHei", 11, QFont.Bold))
         username_label.setFixedWidth(70)
+        username_label.setObjectName("formLabel")
         self.username_label = username_label
         username_layout.addWidget(username_label)
 
@@ -109,6 +116,7 @@ class LoginWindow(QMainWindow):
         password_label = QLabel("密  码:")
         password_label.setFont(QFont("Microsoft YaHei", 11, QFont.Bold))
         password_label.setFixedWidth(70)
+        password_label.setObjectName("formLabel")
         self.password_label = password_label
         password_layout.addWidget(password_label)
 
@@ -127,6 +135,7 @@ class LoginWindow(QMainWindow):
         remember_layout.addStretch()
 
         forgot_btn = PushButton("忘记密码?")
+        forgot_btn.setObjectName("linkButton")
         forgot_btn.clicked.connect(self.on_forgot_password)
         self.forgot_btn = forgot_btn
         remember_layout.addWidget(forgot_btn)
@@ -138,6 +147,7 @@ class LoginWindow(QMainWindow):
         # 错误提示标签
         self.error_label = QLabel("")
         self.error_label.setAlignment(Qt.AlignCenter)
+        self.error_label.setObjectName("errorLabel")
         self.error_label.setVisible(False)
         right_layout.addWidget(self.error_label)
 
@@ -150,6 +160,7 @@ class LoginWindow(QMainWindow):
         btn_layout.addWidget(self.login_btn)
 
         self.register_btn = PushButton("注 册")
+        self.register_btn.setObjectName("secondaryButton")
         self.register_btn.clicked.connect(self.on_register)
         btn_layout.addWidget(self.register_btn)
 
@@ -162,6 +173,7 @@ class LoginWindow(QMainWindow):
         db_config_layout.setSpacing(10)
         
         db_config_btn = PushButton("数据库配置")
+        db_config_btn.setObjectName("linkButton")
         db_config_btn.clicked.connect(self.on_db_config)
         self.db_config_btn = db_config_btn
         db_config_layout.addWidget(db_config_btn)
@@ -169,6 +181,7 @@ class LoginWindow(QMainWindow):
         # 数据库连接状态
         self.db_status_label = QLabel("● 未连接")
         self.db_status_label.setFont(QFont("Microsoft YaHei", 10))
+        self.db_status_label.setObjectName("subtitleLabel")
         self.update_db_status_label()
         db_config_layout.addWidget(self.db_status_label)
         
@@ -208,37 +221,14 @@ class LoginWindow(QMainWindow):
             QLabel {
                 background: qlineargradient(
                     x1: 0, y1: 0, x2: 1, y2: 1,
-                    stop: 0 #2196F3,
-                    stop: 1 #1976D2
+                    stop: 0 #6750A4,
+                    stop: 1 #513F8C
                 );
             }
         """)
         self.image_label.setText("🖼️\n登录图片")
         self.image_label.setFont(QFont("Segoe UI Emoji", 48))
         self.image_label.setAlignment(Qt.AlignCenter)
-
-    def apply_styles(self):
-        """应用样式"""
-        self.setStyleSheet(LoginStyles.get_main_window_style())
-        self.left_panel.setStyleSheet(LoginStyles.get_left_panel_style())
-        self.right_panel.setStyleSheet(LoginStyles.get_right_panel_style())
-
-        self.title_label.setStyleSheet(LoginStyles.get_title_label_style())
-        self.subtitle_label.setStyleSheet(LoginStyles.get_subtitle_label_style())
-        self.username_label.setStyleSheet(LoginStyles.get_form_label_style())
-        self.password_label.setStyleSheet(LoginStyles.get_form_label_style())
-
-        self.username_input.setStyleSheet(LoginStyles.get_input_style())
-        self.password_input.setStyleSheet(LoginStyles.get_input_style())
-
-        self.login_btn.setStyleSheet(LoginStyles.get_primary_button_style())
-        self.register_btn.setStyleSheet(LoginStyles.get_secondary_button_style())
-
-        self.forgot_btn.setStyleSheet(LoginStyles.get_link_button_style())
-        self.db_config_btn.setStyleSheet(LoginStyles.get_link_button_style())
-
-        self.remember_checkbox.setStyleSheet(LoginStyles.get_checkbox_style())
-        self.error_label.setStyleSheet(LoginStyles.get_error_label_style())
 
     def add_shadow_effect(self):
         """添加阴影效果"""
@@ -272,21 +262,21 @@ class LoginWindow(QMainWindow):
         """注册按钮点击"""
         from .dialogs import RegisterDialog
 
-        dialog = RegisterDialog(self, self.auth_manager)
+        dialog = RegisterDialog(self, self.auth_manager, self.theme_manager)
         dialog.exec_()
 
     def on_forgot_password(self):
         """忘记密码"""
         from .dialogs import ForgotPasswordDialog
 
-        dialog = ForgotPasswordDialog(self)
+        dialog = ForgotPasswordDialog(self, self.theme_manager)
         dialog.exec_()
 
     def on_db_config(self):
         """数据库配置"""
         from .dialogs import DatabaseConfigDialog
 
-        dialog = DatabaseConfigDialog(self, self.db_config)
+        dialog = DatabaseConfigDialog(self, self.db_config, self.theme_manager)
         dialog.exec_()
         # 对话框关闭后更新状态显示
         self.update_db_status_label()
@@ -298,16 +288,10 @@ class LoginWindow(QMainWindow):
         
         if is_configured:
             self.db_status_label.setText("● 已连接")
-            self.db_status_label.setStyleSheet(f"""
-                color: {LoginStyles.COLORS['success']};
-                background: transparent;
-            """)
+            self.db_status_label.setObjectName("successLabel")
         else:
             self.db_status_label.setText("● 未连接")
-            self.db_status_label.setStyleSheet(f"""
-                color: {LoginStyles.COLORS['text_secondary']};
-                background: transparent;
-            """)
+            self.db_status_label.setObjectName("subtitleLabel")
 
     def mousePressEvent(self, event):
         """鼠标按下事件（用于拖动窗口）"""

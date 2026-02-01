@@ -1,41 +1,31 @@
 """
-统一风格的对话框组件
+统一风格的对话框组件 - 使用 QSS 主题
 """
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QSpinBox, QFormLayout, QFrame, QMessageBox,
     QGraphicsDropShadowEffect
 )
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont, QColor
-
-from .styles import LoginStyles
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QColor
 
 
 class BaseDialog(QDialog):
-    """基础对话框 - 统一风格"""
+    """基础对话框 - 统一风格，使用 QSS 主题"""
 
-    def __init__(self, parent=None, title=""):
+    def __init__(self, parent=None, title="", theme_manager=None):
+        self.theme_manager = theme_manager
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setFixedSize(400, 300)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
 
         self.setup_ui()
-        self.apply_styles()
+        # 不再调用 apply_styles，使用全局 QSS
 
     def setup_ui(self):
         """设置UI - 子类重写"""
         pass
-
-    def apply_styles(self):
-        """应用统一样式"""
-        self.setStyleSheet(f"""
-            QDialog {{
-                background-color: {LoginStyles.COLORS['card_bg']};
-                border: none;
-            }}
-        """)
 
     def add_shadow(self):
         """添加阴影效果"""
@@ -48,35 +38,24 @@ class BaseDialog(QDialog):
     def create_title_bar(self, title_text):
         """创建标题栏"""
         title_frame = QFrame()
+        title_frame.setObjectName("titleBarFrame")
         title_frame.setFixedHeight(45)
         title_layout = QHBoxLayout(title_frame)
         title_layout.setContentsMargins(15, 0, 15, 0)
 
         title_label = QLabel(title_text)
         title_label.setFont(QFont("Microsoft YaHei", 14, QFont.Bold))
-        title_label.setStyleSheet(f"color: {LoginStyles.COLORS['text_primary']}; background: transparent;")
+        title_label.setObjectName("titleLabel")
         title_layout.addWidget(title_label)
 
         title_layout.addStretch()
 
-        # 关闭按钮
+        # 关闭按钮 - 使用QSS样式
         close_btn = QPushButton("×")
-        close_btn.setFixedSize(30, 30)
+        close_btn.setObjectName("closeButton")
+        close_btn.setProperty("class", "titlebar-button")
+        close_btn.setFixedSize(46, 32)
         close_btn.setCursor(Qt.PointingHandCursor)
-        close_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {LoginStyles.COLORS['text_secondary']};
-                border: none;
-                font-size: 18px;
-                font-weight: bold;
-                border-radius: 5px;
-            }}
-            QPushButton:hover {{
-                background-color: #f38ba8;
-                color: white;
-            }}
-        """)
         close_btn.clicked.connect(self.reject)
         title_layout.addWidget(close_btn)
 
@@ -87,7 +66,6 @@ class BaseDialog(QDialog):
         input_field = QLineEdit()
         input_field.setPlaceholderText(placeholder)
         input_field.setFixedHeight(40)
-        input_field.setStyleSheet(LoginStyles.get_input_style())
         return input_field
 
     def create_primary_button(self, text):
@@ -95,24 +73,23 @@ class BaseDialog(QDialog):
         btn = QPushButton(text)
         btn.setFixedHeight(40)
         btn.setCursor(Qt.PointingHandCursor)
-        btn.setStyleSheet(LoginStyles.get_primary_button_style())
         return btn
 
     def create_secondary_button(self, text):
         """创建次要按钮"""
         btn = QPushButton(text)
+        btn.setObjectName("secondaryButton")
         btn.setFixedHeight(40)
         btn.setCursor(Qt.PointingHandCursor)
-        btn.setStyleSheet(LoginStyles.get_secondary_button_style())
         return btn
 
 
 class RegisterDialog(BaseDialog):
     """注册对话框"""
 
-    def __init__(self, parent=None, auth_manager=None):
+    def __init__(self, parent=None, auth_manager=None, theme_manager=None):
         self.auth_manager = auth_manager
-        super().__init__(parent, "用户注册")
+        super().__init__(parent, "用户注册", theme_manager)
         self.setFixedSize(380, 320)
 
     def setup_ui(self):
@@ -126,6 +103,7 @@ class RegisterDialog(BaseDialog):
 
         # 内容区域
         content_frame = QFrame()
+        content_frame.setObjectName("contentFrame")
         content_layout = QFormLayout(content_frame)
         content_layout.setContentsMargins(30, 20, 30, 20)
         content_layout.setSpacing(15)
@@ -165,15 +143,30 @@ class RegisterDialog(BaseDialog):
 
         self.add_shadow()
 
+    def do_register(self):
+        """执行注册"""
+        username = self.username_input.text().strip()
+        password = self.password_input.text().strip()
+        confirm = self.confirm_input.text().strip()
+
+        success, message = self.auth_manager.register(username, password, confirm)
+        if success:
+            msg_dialog = MessageDialog(self, "注册成功", message, "success", self.theme_manager)
+            msg_dialog.exec_()
+            self.accept()
+        else:
+            msg_dialog = MessageDialog(self, "注册失败", message, "error", self.theme_manager)
+            msg_dialog.exec_()
+
 
 class ChangePasswordDialog(BaseDialog):
     """修改密码对话框"""
 
-    def __init__(self, parent=None, username="", db_manager=None):
+    def __init__(self, parent=None, username="", db_manager=None, theme_manager=None):
         self.username = username
         self.db_manager = db_manager
         self.success = False
-        super().__init__(parent, "修改密码")
+        super().__init__(parent, "修改密码", theme_manager)
         self.setFixedSize(400, 350)
 
     def setup_ui(self):
@@ -187,6 +180,7 @@ class ChangePasswordDialog(BaseDialog):
 
         # 内容区域
         content_frame = QFrame()
+        content_frame.setObjectName("contentFrame")
         content_layout = QVBoxLayout(content_frame)
         content_layout.setContentsMargins(30, 20, 30, 15)
         content_layout.setSpacing(15)
@@ -194,7 +188,7 @@ class ChangePasswordDialog(BaseDialog):
         # 用户名显示
         user_label = QLabel(f"当前用户: {self.username}")
         user_label.setFont(QFont("Microsoft YaHei", 11))
-        user_label.setStyleSheet(f"color: {LoginStyles.COLORS['text_secondary']}; background: transparent;")
+        user_label.setObjectName("subtitleLabel")
         content_layout.addWidget(user_label)
 
         # 原密码输入
@@ -289,27 +283,12 @@ class ChangePasswordDialog(BaseDialog):
         else:
             QMessageBox.warning(self, "错误", "数据库未连接")
 
-    def do_register(self):
-        """执行注册"""
-        username = self.username_input.text().strip()
-        password = self.password_input.text().strip()
-        confirm = self.confirm_input.text().strip()
-
-        success, message = self.auth_manager.register(username, password, confirm)
-        if success:
-            msg_dialog = MessageDialog(self, "注册成功", message, "success")
-            msg_dialog.exec_()
-            self.accept()
-        else:
-            msg_dialog = MessageDialog(self, "注册失败", message, "error")
-            msg_dialog.exec_()
-
 
 class PasswordVerifyDialog(BaseDialog):
     """密码验证对话框"""
 
-    def __init__(self, parent=None):
-        super().__init__(parent, "验证身份")
+    def __init__(self, parent=None, theme_manager=None):
+        super().__init__(parent, "验证身份", theme_manager)
         self.setFixedSize(350, 200)
         self.verified = False
 
@@ -324,6 +303,7 @@ class PasswordVerifyDialog(BaseDialog):
 
         # 内容区域
         content_frame = QFrame()
+        content_frame.setObjectName("contentFrame")
         content_layout = QVBoxLayout(content_frame)
         content_layout.setContentsMargins(5, 5, 5, 5)
         content_layout.setSpacing(15)
@@ -331,7 +311,7 @@ class PasswordVerifyDialog(BaseDialog):
         # 提示信息
         info_label = QLabel("请输入管理员密码以重新配置")
         info_label.setFont(QFont("Microsoft YaHei", 11))
-        info_label.setStyleSheet(f"color: {LoginStyles.COLORS['text_secondary']}; background: transparent;")
+        info_label.setObjectName("subtitleLabel")
         content_layout.addWidget(info_label)
 
         # 密码输入
@@ -409,9 +389,9 @@ class PasswordVerifyDialog(BaseDialog):
 class DatabaseConfigDialog(BaseDialog):
     """数据库配置对话框"""
 
-    def __init__(self, parent=None, db_config=None):
+    def __init__(self, parent=None, db_config=None, theme_manager=None):
         self.db_config = db_config
-        super().__init__(parent, "数据库配置")
+        super().__init__(parent, "数据库配置", theme_manager)
         self.setFixedSize(420, 400)
 
     def setup_ui(self):
@@ -429,6 +409,7 @@ class DatabaseConfigDialog(BaseDialog):
 
         # 内容区域
         content_frame = QFrame()
+        content_frame.setObjectName("contentFrame")
         content_layout = QFormLayout(content_frame)
         content_layout.setContentsMargins(30, 20, 30, 15)
         content_layout.setSpacing(12)
@@ -443,18 +424,6 @@ class DatabaseConfigDialog(BaseDialog):
         self.port_input.setRange(1, 65535)
         self.port_input.setValue(config.get('port', 3306))
         self.port_input.setFixedHeight(40)
-        self.port_input.setStyleSheet(f"""
-            QSpinBox {{
-                background-color: {LoginStyles.COLORS['input_bg']};
-                border: 2px solid {LoginStyles.COLORS['border']};
-                border-radius: 8px;
-                padding: 5px 10px;
-                font-size: 14px;
-            }}
-            QSpinBox:focus {{
-                border-color: {LoginStyles.COLORS['primary']};
-            }}
-        """)
         content_layout.addRow("端口:", self.port_input)
 
         # 数据库
@@ -476,11 +445,7 @@ class DatabaseConfigDialog(BaseDialog):
         # 连接状态显示
         self.status_label = QLabel("● 未连接")
         self.status_label.setFont(QFont("Microsoft YaHei", 11))
-        self.status_label.setStyleSheet(f"""
-            color: {LoginStyles.COLORS['text_secondary']};
-            background: transparent;
-            padding: 5px 0;
-        """)
+        self.status_label.setObjectName("subtitleLabel")
         content_layout.addRow("状态:", self.status_label)
 
         layout.addWidget(content_frame)
@@ -522,11 +487,7 @@ class DatabaseConfigDialog(BaseDialog):
             self.reconfig_btn.setVisible(True)
             # 更新状态为已连接
             self.status_label.setText("● 已连接")
-            self.status_label.setStyleSheet(f"""
-                color: {LoginStyles.COLORS['success']};
-                background: transparent;
-                padding: 5px 0;
-            """)
+            self.status_label.setObjectName("successLabel")
 
     def test_connection(self):
         """测试连接并初始化数据库"""
@@ -546,12 +507,8 @@ class DatabaseConfigDialog(BaseDialog):
         if not success:
             # 更新状态为连接失败
             self.status_label.setText("● 连接失败")
-            self.status_label.setStyleSheet(f"""
-                color: {LoginStyles.COLORS['error']};
-                background: transparent;
-                padding: 5px 0;
-            """)
-            msg_dialog = MessageDialog(self, "连接失败", message, "error")
+            self.status_label.setObjectName("errorLabel")
+            msg_dialog = MessageDialog(self, "连接失败", message, "error", self.theme_manager)
             msg_dialog.exec_()
             return
         
@@ -562,12 +519,8 @@ class DatabaseConfigDialog(BaseDialog):
         if success:
             # 更新状态为已连接
             self.status_label.setText("● 已连接")
-            self.status_label.setStyleSheet(f"""
-                color: {LoginStyles.COLORS['success']};
-                background: transparent;
-                padding: 5px 0;
-            """)
-            msg_dialog = MessageDialog(self, "初始化完成", message, "success")
+            self.status_label.setObjectName("successLabel")
+            msg_dialog = MessageDialog(self, "初始化完成", message, "success", self.theme_manager)
             msg_dialog.exec_()
             # 禁用所有输入控件
             self.set_inputs_enabled(False)
@@ -581,12 +534,8 @@ class DatabaseConfigDialog(BaseDialog):
         else:
             # 更新状态为初始化失败
             self.status_label.setText("● 初始化失败")
-            self.status_label.setStyleSheet(f"""
-                color: {LoginStyles.COLORS['error']};
-                background: transparent;
-                padding: 5px 0;
-            """)
-            msg_dialog = MessageDialog(self, "初始化失败", message, "error")
+            self.status_label.setObjectName("errorLabel")
+            msg_dialog = MessageDialog(self, "初始化失败", message, "error", self.theme_manager)
             msg_dialog.exec_()
 
     def save_config(self):
@@ -601,16 +550,16 @@ class DatabaseConfigDialog(BaseDialog):
         )
 
         if success:
-            msg_dialog = MessageDialog(self, "保存成功", "数据库配置已保存", "success")
+            msg_dialog = MessageDialog(self, "保存成功", "数据库配置已保存", "success", self.theme_manager)
             msg_dialog.exec_()
             self.accept()
         else:
-            msg_dialog = MessageDialog(self, "保存失败", "配置保存失败，请检查权限", "error")
+            msg_dialog = MessageDialog(self, "保存失败", "配置保存失败，请检查权限", "error", self.theme_manager)
             msg_dialog.exec_()
 
     def reconfigure(self):
         """重新配置 - 需要验证密码"""
-        verify_dialog = PasswordVerifyDialog(self)
+        verify_dialog = PasswordVerifyDialog(self, self.theme_manager)
         if verify_dialog.exec_() == QDialog.Accepted and verify_dialog.verified:
             # 验证成功，解除禁用
             self.set_inputs_enabled(True)
@@ -622,12 +571,8 @@ class DatabaseConfigDialog(BaseDialog):
             self.db_config.update_config(is_configured=False)
             # 重置状态显示
             self.status_label.setText("● 未连接")
-            self.status_label.setStyleSheet(f"""
-                color: {LoginStyles.COLORS['text_secondary']};
-                background: transparent;
-                padding: 5px 0;
-            """)
-            msg_dialog = MessageDialog(self, "验证成功", "现在可以重新配置数据库", "success")
+            self.status_label.setObjectName("subtitleLabel")
+            msg_dialog = MessageDialog(self, "验证成功", "现在可以重新配置数据库", "success", self.theme_manager)
             msg_dialog.exec_()
 
     def set_inputs_enabled(self, enabled):
@@ -642,10 +587,10 @@ class DatabaseConfigDialog(BaseDialog):
 class MessageDialog(BaseDialog):
     """消息提示对话框"""
 
-    def __init__(self, parent=None, title="提示", message="", msg_type="info"):
+    def __init__(self, parent=None, title="提示", message="", msg_type="info", theme_manager=None):
         self.message = message
         self.msg_type = msg_type  # info, warning, error, success
-        super().__init__(parent, title)
+        super().__init__(parent, title, theme_manager)
         self.setFixedSize(350, 200)
 
     def setup_ui(self):
@@ -659,17 +604,12 @@ class MessageDialog(BaseDialog):
 
         # 内容区域
         content_frame = QFrame()
+        content_frame.setObjectName("contentFrame")
         content_layout = QVBoxLayout(content_frame)
         content_layout.setContentsMargins(30, 25, 30, 20)
         content_layout.setSpacing(15)
 
         # 根据类型设置图标颜色
-        icon_colors = {
-            'info': LoginStyles.COLORS['primary'],
-            'success': LoginStyles.COLORS['success'],
-            'warning': '#ff9800',
-            'error': LoginStyles.COLORS['error']
-        }
         icons = {
             'info': 'ℹ️',
             'success': '✅',
@@ -688,7 +628,6 @@ class MessageDialog(BaseDialog):
 
         message_label = QLabel(self.message)
         message_label.setFont(QFont("Microsoft YaHei", 12))
-        message_label.setStyleSheet(f"color: {LoginStyles.COLORS['text_primary']}; background: transparent;")
         message_label.setWordWrap(True)
         msg_layout.addWidget(message_label, 1)
 
@@ -713,8 +652,8 @@ class MessageDialog(BaseDialog):
 class ForgotPasswordDialog(BaseDialog):
     """忘记密码对话框"""
 
-    def __init__(self, parent=None):
-        super().__init__(parent, "忘记密码")
+    def __init__(self, parent=None, theme_manager=None):
+        super().__init__(parent, "忘记密码", theme_manager)
         self.setFixedSize(380, 250)
 
     def setup_ui(self):
@@ -728,6 +667,7 @@ class ForgotPasswordDialog(BaseDialog):
 
         # 内容区域
         content_frame = QFrame()
+        content_frame.setObjectName("contentFrame")
         content_layout = QVBoxLayout(content_frame)
         content_layout.setContentsMargins(30, 30, 30, 20)
         content_layout.setSpacing(20)
@@ -735,21 +675,20 @@ class ForgotPasswordDialog(BaseDialog):
         # 提示信息
         info_label = QLabel("请联系管理员重置密码")
         info_label.setFont(QFont("Microsoft YaHei", 12))
-        info_label.setStyleSheet(f"color: {LoginStyles.COLORS['text_primary']}; background: transparent;")
         info_label.setAlignment(Qt.AlignCenter)
         content_layout.addWidget(info_label)
 
         # 邮箱信息
         email_label = QLabel("📧  admin@example.com")
         email_label.setFont(QFont("Microsoft YaHei", 11))
-        email_label.setStyleSheet(f"color: {LoginStyles.COLORS['primary']}; background: transparent;")
+        email_label.setObjectName("subtitleLabel")
         email_label.setAlignment(Qt.AlignCenter)
         content_layout.addWidget(email_label)
 
         # 电话信息
         phone_label = QLabel("📞  400-123-4567")
         phone_label.setFont(QFont("Microsoft YaHei", 11))
-        phone_label.setStyleSheet(f"color: {LoginStyles.COLORS['primary']}; background: transparent;")
+        phone_label.setObjectName("subtitleLabel")
         phone_label.setAlignment(Qt.AlignCenter)
         content_layout.addWidget(phone_label)
 

@@ -1,23 +1,23 @@
 """
-页面组件
+页面组件 - 使用 QSS 主题
 """
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
 )
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont
-
-from ui import StyleSheetManager
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 
 
 class HomePage(QFrame):
-    """首页"""
+    """首页 - 使用 QSS 主题"""
 
     def __init__(self, theme_manager=None):
         super().__init__()
         self.theme_manager = theme_manager
         self.setup_ui()
-        self.theme_manager.add_observer(self.apply_theme)
+        # 监听主题变化
+        if self.theme_manager:
+            self.theme_manager.add_observer(self.on_theme_changed)
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -27,11 +27,13 @@ class HomePage(QFrame):
         # 标题
         title = QLabel("欢迎使用")
         title.setFont(QFont("Microsoft YaHei", 24, QFont.Bold))
+        title.setObjectName("titleLabel")
         layout.addWidget(title)
 
         # 副标题
         subtitle = QLabel("这是一个支持深色/浅色主题切换的演示程序")
         subtitle.setFont(QFont("Microsoft YaHei", 12))
+        subtitle.setObjectName("subtitleLabel")
         layout.addWidget(subtitle)
 
         layout.addSpacing(30)
@@ -52,12 +54,11 @@ class HomePage(QFrame):
         layout.addLayout(cards_layout)
         layout.addStretch()
 
-        self.apply_theme(self.theme_manager.get_theme())
-
     def create_card(self, title, value, icon):
         """创建信息卡片"""
         card = QFrame()
         card.setFixedSize(180, 120)
+        card.setObjectName("cardFrame")
 
         layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -68,35 +69,32 @@ class HomePage(QFrame):
 
         value_label = QLabel(value)
         value_label.setFont(QFont("Microsoft YaHei", 20, QFont.Bold))
-        value_label.setObjectName("value_label")
+        value_label.setObjectName("stat_value")
         layout.addWidget(value_label)
 
         title_label = QLabel(title)
         title_label.setFont(QFont("Microsoft YaHei", 11))
-        title_label.setObjectName("title_label")
+        title_label.setObjectName("subtitleLabel")
         layout.addWidget(title_label)
-
-        self.theme_manager.add_observer(lambda t, c=card: self.apply_card_theme(c, t))
 
         return card
 
-    def apply_card_theme(self, card, theme):
-        """应用卡片主题"""
-        card.setStyleSheet(StyleSheetManager.get_card_style(theme))
-
-    def apply_theme(self, theme):
-        """应用主题"""
-        self.setStyleSheet(StyleSheetManager.get_homepage_style(theme))
+    def on_theme_changed(self, theme):
+        """主题变化回调 - QSS 已全局加载"""
+        # QSS 样式已通过 ThemeManager.apply_qss() 全局加载
+        pass
 
 
 class SettingsPage(QFrame):
-    """设置页面"""
+    """设置页面 - 使用 QSS 主题"""
 
     def __init__(self, theme_manager=None):
         super().__init__()
         self.theme_manager = theme_manager
         self.setup_ui()
-        self.theme_manager.add_observer(self.apply_theme)
+        # 监听主题变化
+        if self.theme_manager:
+            self.theme_manager.add_observer(self.on_theme_changed)
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -106,6 +104,7 @@ class SettingsPage(QFrame):
         # 标题
         title = QLabel("设置")
         title.setFont(QFont("Microsoft YaHei", 24, QFont.Bold))
+        title.setObjectName("titleLabel")
         layout.addWidget(title)
 
         layout.addSpacing(20)
@@ -113,6 +112,7 @@ class SettingsPage(QFrame):
         # 主题设置区域
         theme_frame = QFrame()
         theme_frame.setFixedHeight(150)
+        theme_frame.setObjectName("cardFrame")
         self.theme_frame = theme_frame
 
         theme_layout = QVBoxLayout(theme_frame)
@@ -124,7 +124,7 @@ class SettingsPage(QFrame):
 
         theme_desc = QLabel("选择您喜欢的主题样式")
         theme_desc.setFont(QFont("Microsoft YaHei", 11))
-        self.theme_desc = theme_desc
+        theme_desc.setObjectName("subtitleLabel")
         theme_layout.addWidget(theme_desc)
 
         theme_layout.addSpacing(15)
@@ -152,48 +152,46 @@ class SettingsPage(QFrame):
         layout.addWidget(theme_frame)
 
         # 当前主题显示
-        self.current_theme_label = QLabel(f"当前主题: {self.theme_manager.get_theme()['name']}")
+        self.current_theme_label = QLabel(f"当前主题: {self.theme_manager.get_theme()['name'] if self.theme_manager else '深色主题'}")
         self.current_theme_label.setFont(QFont("Microsoft YaHei", 11))
         layout.addWidget(self.current_theme_label)
 
         layout.addStretch()
 
-        self.apply_theme(self.theme_manager.get_theme())
+        # 初始化按钮状态
+        self.update_theme_buttons()
 
     def switch_theme(self, theme_name):
         """切换主题"""
-        self.theme_manager.switch_theme(theme_name)
-        self.update_theme_buttons()
+        if self.theme_manager:
+            self.theme_manager.switch_theme(theme_name)
+            self.update_theme_buttons()
 
     def update_theme_buttons(self):
         """更新主题按钮状态"""
-        current = self.theme_manager.get_current_theme_name()
-        self.dark_btn.setChecked(current == 'dark')
-        self.light_btn.setChecked(current == 'light')
-        self.current_theme_label.setText(f"当前主题: {self.theme_manager.get_theme()['name']}")
+        if self.theme_manager:
+            current = self.theme_manager.get_current_theme_name()
+            self.dark_btn.setChecked(current == 'dark')
+            self.light_btn.setChecked(current == 'light')
+            self.current_theme_label.setText(f"当前主题: {self.theme_manager.get_theme()['name']}")
 
-    def apply_theme(self, theme):
-        """应用主题"""
-        self.setStyleSheet(StyleSheetManager.get_settings_page_style(theme))
-        self.theme_frame.setStyleSheet(StyleSheetManager.get_settings_card_style(theme))
-        self.theme_desc.setStyleSheet(f"color: {theme['text_secondary']}; border: none;")
-
-        btn_style = StyleSheetManager.get_theme_btn_style(theme)
-        self.dark_btn.setStyleSheet(btn_style)
-        self.light_btn.setStyleSheet(btn_style)
-
+    def on_theme_changed(self, theme):
+        """主题变化回调 - QSS 已全局加载"""
+        # QSS 样式已通过 ThemeManager.apply_qss() 全局加载
         self.update_theme_buttons()
 
 
 class PlaceholderPage(QFrame):
-    """占位页面"""
+    """占位页面 - 使用 QSS 主题"""
 
     def __init__(self, title_text, theme_manager=None):
         super().__init__()
         self.theme_manager = theme_manager
         self.title_text = title_text
         self.setup_ui()
-        self.theme_manager.add_observer(self.apply_theme)
+        # 监听主题变化
+        if self.theme_manager:
+            self.theme_manager.add_observer(self.on_theme_changed)
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -202,12 +200,11 @@ class PlaceholderPage(QFrame):
         label = QLabel(f"{self.title_text}\n页面内容")
         label.setFont(QFont("Microsoft YaHei", 18))
         label.setAlignment(Qt.AlignCenter)
+        label.setObjectName("subtitleLabel")
         self.label = label
         layout.addWidget(label)
 
-        self.apply_theme(self.theme_manager.get_theme())
-
-    def apply_theme(self, theme):
-        """应用主题"""
-        self.setStyleSheet(StyleSheetManager.get_placeholder_page_style(theme))
-        self.label.setStyleSheet(f"color: {theme['text_secondary']}; border: none;")
+    def on_theme_changed(self, theme):
+        """主题变化回调 - QSS 已全局加载"""
+        # QSS 样式已通过 ThemeManager.apply_qss() 全局加载
+        pass

@@ -1,15 +1,13 @@
 """
-侧边栏组件
+侧边栏组件 - 使用 QSS 主题
 """
-from PyQt5.QtWidgets import QFrame, QVBoxLayout, QLabel, QPushButton
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont
-
-from ui import StyleSheetManager
+from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel, QPushButton
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 
 
 class SidebarButton(QPushButton):
-    """侧边栏按钮"""
+    """侧边栏按钮 - 使用 QSS 主题"""
 
     def __init__(self, text, icon_text, theme_manager=None):
         super().__init__()
@@ -20,13 +18,11 @@ class SidebarButton(QPushButton):
         self.setCursor(Qt.PointingHandCursor)
         self.setFixedHeight(50)
         self.setFont(QFont("Microsoft YaHei", 12, QFont.Bold))
+        self.setObjectName("sidebarButton")
 
         # 设置按钮文本为图标+文字（文字按4字宽度居中对齐）
         padded_text = self._pad_text_to_4_chars(text)
         self.setText(f"{icon_text}  {padded_text}")
-
-        self.theme_manager.add_observer(self.apply_theme)
-        self.apply_theme(self.theme_manager.get_theme())
 
     def _pad_text_to_4_chars(self, text):
         """将文字填充到4个字宽度（8个字符），不足的在中间加空格"""
@@ -43,23 +39,22 @@ class SidebarButton(QPushButton):
             # 1个字：  字    （两边各加3个空格，共8字符）
             return f"   {text}   "
 
-    def apply_theme(self, theme):
-        """应用主题"""
-        self.setStyleSheet(StyleSheetManager.get_sidebar_btn_style(theme))
-
 
 class Sidebar(QFrame):
-    """侧边栏"""
+    """侧边栏 - 使用 QSS 主题"""
 
     def __init__(self, parent=None, theme_manager=None):
         super().__init__(parent)
         self.theme_manager = theme_manager
         self.buttons = []
         self.setup_ui()
-        self.theme_manager.add_observer(self.apply_theme)
+        # 监听主题变化
+        if self.theme_manager:
+            self.theme_manager.add_observer(self.on_theme_changed)
 
     def setup_ui(self):
         self.setFixedWidth(200)
+        self.setObjectName("sidebarFrame")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(15, 20, 15, 20)
@@ -99,10 +94,7 @@ class Sidebar(QFrame):
         self.settings_btn = SidebarButton("设置", "⚙️", self.theme_manager)
         layout.addWidget(self.settings_btn)
 
-        # 应用初始主题
-        self.apply_theme(self.theme_manager.get_theme())
-
-    def apply_theme(self, theme):
-        """应用主题"""
-        self.setStyleSheet(StyleSheetManager.get_sidebar_style(theme))
-        self.separator.setStyleSheet(f"background-color: transparent; border: none;")
+    def on_theme_changed(self, theme):
+        """主题变化回调 - QSS 已全局加载"""
+        # QSS 样式已通过 ThemeManager.apply_qss() 全局加载
+        pass

@@ -2,8 +2,8 @@
 登录窗口入口
 """
 import sys
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtGui import QFont
+from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QFont
 
 from login.ui import LoginWindow
 
@@ -15,7 +15,7 @@ def main():
     window = LoginWindow()
     window.show()
 
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

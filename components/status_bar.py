@@ -1,24 +1,25 @@
 """
-状态栏组件
+状态栏组件 - 使用 QSS 主题
 """
-from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel
-from PyQt5.QtGui import QFont
-
-from ui import StyleSheetManager
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel
+from PySide6.QtGui import QFont
 
 
 class StatusBar(QFrame):
-    """状态栏"""
+    """状态栏 - 使用 QSS 主题"""
 
     def __init__(self, theme_manager=None, db_config=None):
         super().__init__()
         self.theme_manager = theme_manager
         self.db_config = db_config
         self.setup_ui()
-        self.theme_manager.add_observer(self.apply_theme)
+        # 监听主题变化
+        if self.theme_manager:
+            self.theme_manager.add_observer(self.on_theme_changed)
 
     def setup_ui(self):
         self.setFixedHeight(28)
+        self.setObjectName("statusBar")
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(15, 0, 15, 0)
@@ -32,6 +33,7 @@ class StatusBar(QFrame):
         # 数据库连接状态
         self.db_status_label = QLabel("● 数据库: 未连接")
         self.db_status_label.setFont(QFont("Microsoft YaHei", 9))
+        self.db_status_label.setObjectName("subtitleLabel")
         layout.addWidget(self.db_status_label)
 
         layout.addStretch()
@@ -41,12 +43,12 @@ class StatusBar(QFrame):
         self.info_label.setFont(QFont("Microsoft YaHei", 9))
         layout.addWidget(self.info_label)
 
-        self.apply_theme(self.theme_manager.get_theme())
         self.update_db_status()
 
-    def apply_theme(self, theme):
-        """应用主题"""
-        self.setStyleSheet(StyleSheetManager.get_statusbar_style(theme))
+    def on_theme_changed(self, theme):
+        """主题变化回调 - QSS 已全局加载"""
+        # QSS 样式已通过 ThemeManager.apply_qss() 全局加载
+        pass
 
     def set_status(self, text):
         """设置状态文本"""
@@ -60,10 +62,10 @@ class StatusBar(QFrame):
             
             if is_configured:
                 self.db_status_label.setText("● 数据库: 已连接")
-                self.db_status_label.setStyleSheet("color: #4caf50;")
+                self.db_status_label.setObjectName("successLabel")
             else:
                 self.db_status_label.setText("● 数据库: 未连接")
-                self.db_status_label.setStyleSheet("color: #999999;")
+                self.db_status_label.setObjectName("subtitleLabel")
         else:
             self.db_status_label.setText("● 数据库: 未配置")
-            self.db_status_label.setStyleSheet("color: #999999;")
+            self.db_status_label.setObjectName("subtitleLabel")

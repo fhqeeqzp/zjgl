@@ -1,25 +1,24 @@
 """
 项目编辑对话框
-用于新建和编辑项目信息 - 使用 QFluentWidgets 组件
+用于新建和编辑项目信息 - 使用 QSS 主题
 """
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QFormLayout, QGroupBox, QMessageBox,
-    QFileDialog, QWidget, QGridLayout, QFrame
+    QFileDialog, QWidget, QGridLayout, QFrame, QPushButton
 )
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont
+from PySide6.QtCore import Qt, QDate
+from PySide6.QtGui import QFont
 
 from ..logic.project_manager import ProjectManager
-from ui import StyleSheetManager
 from ui.fluent_widgets import (
-    LineEdit, ComboBox, DoubleSpinBox, DateEdit, TextEdit,
+    LineEdit, ComboBox, DateEdit, TextEdit,
     PushButton, PrimaryPushButton
 )
 
 
 class ProjectDialog(QDialog):
-    """项目编辑对话框 - 无边框自定义标题栏"""
+    """项目编辑对话框 - 无边框自定义标题栏，使用 QSS 主题"""
 
     def __init__(self, project_manager: ProjectManager, project_id: int = None,
                  theme_manager=None, parent=None):
@@ -49,28 +48,28 @@ class ProjectDialog(QDialog):
 
         # 应用主题
         if theme_manager:
-            theme_manager.add_observer(self.apply_theme)
-            self.apply_theme(theme_manager.get_theme())
+            theme_manager.add_observer(self.on_theme_changed)
 
     def setup_ui(self):
         """设置UI - 自定义标题栏"""
-        self.setMinimumWidth(700)
-        self.setMinimumHeight(600)
+        self.setMinimumWidth(600)
+        self.setMinimumHeight(450)
 
         # 主布局
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(0)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 创建内容容器（带圆角和背景）
+        # 创建内容容器
         self.content_frame = QFrame()
         self.content_frame.setObjectName("contentFrame")
         layout = QVBoxLayout(self.content_frame)
-        layout.setSpacing(20)
-        layout.setContentsMargins(0, 0, 0, 30)
+        layout.setSpacing(15)
+        layout.setContentsMargins(0, 0, 0, 20)
 
         # ========== 自定义标题栏 ==========
         title_bar = QFrame()
+        title_bar.setObjectName("titleBarFrame")
         title_bar.setFixedHeight(50)
         title_bar_layout = QHBoxLayout(title_bar)
         title_bar_layout.setContentsMargins(20, 0, 20, 0)
@@ -80,13 +79,16 @@ class ProjectDialog(QDialog):
         title_text = "新建项目" if not self.project_id else "编辑项目"
         title = QLabel(title_text)
         title.setFont(QFont("Microsoft YaHei", 14, QFont.Bold))
+        title.setObjectName("titleLabel")
         title_bar_layout.addWidget(title)
 
         title_bar_layout.addStretch()
 
-        # 关闭按钮
+        # 关闭按钮 - 使用QSS样式
         close_btn = QPushButton("×")
-        close_btn.setFixedSize(32, 32)
+        close_btn.setObjectName("closeButton")
+        close_btn.setProperty("class", "titlebar-button")
+        close_btn.setFixedSize(46, 32)
         close_btn.setFont(QFont("Microsoft YaHei", 14))
         close_btn.setCursor(Qt.PointingHandCursor)
         close_btn.clicked.connect(self.reject)
@@ -94,16 +96,10 @@ class ProjectDialog(QDialog):
 
         layout.addWidget(title_bar)
 
-        # 分隔线
-        separator = QFrame()
-        separator.setFixedHeight(1)
-        separator.setFrameShape(QFrame.HLine)
-        layout.addWidget(separator)
-
         # ========== 表单内容区域 ==========
         form_widget = QWidget()
         form_layout = QFormLayout(form_widget)
-        form_layout.setSpacing(15)
+        form_layout.setSpacing(10)
         form_layout.setLabelAlignment(Qt.AlignRight)
         form_layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
         form_layout.setContentsMargins(30, 10, 30, 0)
@@ -116,6 +112,7 @@ class ProjectDialog(QDialog):
         code_layout = QHBoxLayout()
         code_layout.addWidget(self.code_input)
         self.manual_code_check = PushButton("手动输入")
+        self.manual_code_check.setObjectName("secondaryButton")
         self.manual_code_check.setCheckable(True)
         self.manual_code_check.setFixedWidth(80)
         self.manual_code_check.clicked.connect(self.on_manual_code_toggle)
@@ -128,42 +125,28 @@ class ProjectDialog(QDialog):
         self.name_input.setPlaceholderText("请输入项目名称")
         form_layout.addRow("* 项目名称:", self.name_input)
 
+        # 项目类型和状态水平布局
+        type_status_layout = QHBoxLayout()
+        
         # 项目类型
+        type_layout = QHBoxLayout()
+        type_layout.addWidget(QLabel("项目类型:"))
         self.type_combo = ComboBox()
         self.type_combo.addItems(self.project_manager.get_type_list())
-        form_layout.addRow("项目类型:", self.type_combo)
-
+        type_layout.addWidget(self.type_combo)
+        type_layout.addStretch()
+        
         # 项目状态
+        status_layout = QHBoxLayout()
+        status_layout.addWidget(QLabel("项目状态:"))
         self.status_combo = ComboBox()
         self.status_combo.addItems(self.project_manager.get_status_list())
-        form_layout.addRow("项目状态:", self.status_combo)
-
-        # 金额信息组
-        amount_group = QGroupBox("金额信息")
-        amount_layout = QGridLayout(amount_group)
-        amount_layout.setSpacing(10)
-
-        self.bid_spin = DoubleSpinBox()
-        self.bid_spin.setPrefix("¥ ")
-        amount_layout.addWidget(QLabel("投标金额:"), 0, 0)
-        amount_layout.addWidget(self.bid_spin, 0, 1)
-
-        self.contract_spin = DoubleSpinBox()
-        self.contract_spin.setPrefix("¥ ")
-        amount_layout.addWidget(QLabel("合同金额:"), 0, 2)
-        amount_layout.addWidget(self.contract_spin, 0, 3)
-
-        self.received_spin = DoubleSpinBox()
-        self.received_spin.setPrefix("¥ ")
-        amount_layout.addWidget(QLabel("实收金额:"), 1, 0)
-        amount_layout.addWidget(self.received_spin, 1, 1)
-
-        self.paid_spin = DoubleSpinBox()
-        self.paid_spin.setPrefix("¥ ")
-        amount_layout.addWidget(QLabel("实付金额:"), 1, 2)
-        amount_layout.addWidget(self.paid_spin, 1, 3)
-
-        form_layout.addRow(amount_group)
+        status_layout.addWidget(self.status_combo)
+        status_layout.addStretch()
+        
+        type_status_layout.addLayout(type_layout)
+        type_status_layout.addLayout(status_layout)
+        form_layout.addRow(type_status_layout)
 
         # 日期信息组
         date_group = QGroupBox("日期信息")
@@ -196,6 +179,7 @@ class ProjectDialog(QDialog):
         self.bid_attachment.setReadOnly(True)
         bid_file_layout.addWidget(self.bid_attachment)
         self.bid_file_btn = PushButton("选择文件")
+        self.bid_file_btn.setObjectName("secondaryButton")
         self.bid_file_btn.clicked.connect(lambda: self.select_file("bid"))
         bid_file_layout.addWidget(self.bid_file_btn)
         attachment_layout.addLayout(bid_file_layout)
@@ -206,6 +190,7 @@ class ProjectDialog(QDialog):
         self.construction_attachment.setReadOnly(True)
         construction_file_layout.addWidget(self.construction_attachment)
         self.construction_file_btn = PushButton("选择文件")
+        self.construction_file_btn.setObjectName("secondaryButton")
         self.construction_file_btn.clicked.connect(lambda: self.select_file("construction"))
         construction_file_layout.addWidget(self.construction_file_btn)
         attachment_layout.addLayout(construction_file_layout)
@@ -222,19 +207,24 @@ class ProjectDialog(QDialog):
 
         layout.addStretch()
 
-        # 按钮区域
+        # 按钮区域（居中）
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
         self.cancel_btn = PushButton("取消")
+        self.cancel_btn.setObjectName("secondaryButton")
+        self.cancel_btn.setFixedSize(100, 35)
         self.cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(self.cancel_btn)
 
         btn_layout.addSpacing(20)
 
         self.save_btn = PrimaryPushButton("保存")
+        self.save_btn.setFixedSize(100, 35)
         self.save_btn.clicked.connect(self.on_save)
         btn_layout.addWidget(self.save_btn)
+
+        btn_layout.addStretch()
 
         layout.addLayout(btn_layout)
 
@@ -264,11 +254,6 @@ class ProjectDialog(QDialog):
         index = self.status_combo.findText(status_value)
         if index >= 0:
             self.status_combo.setCurrentIndex(index)
-
-        self.bid_spin.setValue(float(self.project.bid_amount))
-        self.contract_spin.setValue(float(self.project.contract_amount))
-        self.received_spin.setValue(float(self.project.received_amount))
-        self.paid_spin.setValue(float(self.project.paid_amount))
 
         if self.project.start_date:
             self.start_date.setDate(QDate(self.project.start_date.year,
@@ -308,10 +293,6 @@ class ProjectDialog(QDialog):
             'name': self.name_input.text().strip(),
             'project_type': self.type_combo.currentText(),
             'status': self.status_combo.currentText(),
-            'bid_amount': self.bid_spin.value(),
-            'contract_amount': self.contract_spin.value(),
-            'received_amount': self.received_spin.value(),
-            'paid_amount': self.paid_spin.value(),
             'start_date': self.start_date.date().toString('yyyy-MM-dd'),
             'completion_date': self.completion_date.date().toString('yyyy-MM-dd'),
             'bid_attachment': self.bid_attachment.text(),
@@ -335,19 +316,10 @@ class ProjectDialog(QDialog):
         else:
             QMessageBox.critical(self, "失败", f"保存失败: {msg}")
 
-    def apply_theme(self, theme: dict):
-        """应用主题"""
-        # 设置内容框架样式（圆角背景）
-        self.content_frame.setStyleSheet(f"""
-            QFrame#contentFrame {{
-                background-color: {theme['content_bg']};
-                border-radius: 10px;
-                border: 1px solid {theme['border']};
-            }}
-        """)
-
-        # 应用对话框内部样式
-        self.content_frame.setStyleSheet(self.content_frame.styleSheet() + StyleSheetManager.get_project_dialog_style(theme))
+    def on_theme_changed(self, theme: dict):
+        """主题变化回调 - QSS 已全局加载"""
+        # QSS 样式已通过 ThemeManager.apply_qss() 全局加载
+        pass
 
     # ========== 鼠标拖动支持 ==========
     def mousePressEvent(self, event):

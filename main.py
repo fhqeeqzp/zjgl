@@ -1,16 +1,16 @@
 """
 主题切换演示程序 - 主入口
+使用 QSS 文件管理主题
 """
 import sys
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QStackedWidget, QFrame, QGraphicsDropShadowEffect
 )
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor, QFont
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont
 
 from themes import ThemeManager
-from ui import StyleSheetManager
 from components import TitleBar, Sidebar, StatusBar, HomePage, SettingsPage, PlaceholderPage
 from login.ui import LoginWindow
 from login.data.db_config import DatabaseConfig
@@ -18,22 +18,22 @@ from XMGL.ui import ProjectsPage
 
 
 class MainWindow(QMainWindow):
-    """主窗口"""
+    """主窗口 - 使用 QSS 主题"""
 
-    def __init__(self):
+    def __init__(self, theme_manager=None):
         super().__init__()
 
-        # 创建主题管理器（默认深色主题）
-        self.theme_manager = ThemeManager()
+        # 使用传入的主题管理器或创建新的
+        self.theme_manager = theme_manager if theme_manager else ThemeManager()
         
         # 加载数据库配置
         self.db_config = DatabaseConfig()
 
         self.setup_ui()
-        self.apply_window_theme(self.theme_manager.get_theme())
+        # 不再调用 apply_window_theme，使用全局 QSS
 
         # 监听主题变化
-        self.theme_manager.add_observer(self.apply_window_theme)
+        self.theme_manager.add_observer(self.on_theme_changed)
 
     def setup_ui(self):
         # 无边框窗口设置
@@ -46,6 +46,7 @@ class MainWindow(QMainWindow):
 
         # 中央部件
         self.central_widget = QFrame()
+        self.central_widget.setObjectName("centralWidget")
         self.setCentralWidget(self.central_widget)
 
         main_layout = QVBoxLayout(self.central_widget)
@@ -114,9 +115,10 @@ class MainWindow(QMainWindow):
             btn.setChecked(i == index)
         self.sidebar.settings_btn.setChecked(index == 4)
 
-    def apply_window_theme(self, theme):
-        """应用窗口主题"""
-        self.central_widget.setStyleSheet(StyleSheetManager.get_main_window_style(theme))
+    def on_theme_changed(self, theme):
+        """主题变化回调 - QSS 已全局加载，这里处理特殊逻辑"""
+        # 如果需要处理特殊的主题变化逻辑，可以在这里添加
+        pass
 
     def add_shadow_effect(self):
         """添加窗口阴影效果"""
@@ -140,13 +142,26 @@ class MainWindow(QMainWindow):
             (screen.height() - size.height()) // 2
         )
 
+    def set_user_name(self, username):
+        """设置显示的用户名"""
+        self.title_bar.set_user_name(username)
+
+    def set_db_manager(self, db_manager):
+        """设置数据库管理器"""
+        self.title_bar.set_db_manager(db_manager)
+
 
 def main():
+    # 创建应用程序
     app = QApplication(sys.argv)
     app.setFont(QFont("Microsoft YaHei", 10))
 
-    # 先显示登录窗口
-    login_window = LoginWindow()
+    # 创建主题管理器并设置应用程序（自动加载 QSS）
+    theme_manager = ThemeManager()
+    theme_manager.set_application(app)
+
+    # 创建登录窗口，传入主题管理器
+    login_window = LoginWindow(theme_manager)
     login_window.show()
 
     # 等待登录结果
@@ -156,16 +171,19 @@ def main():
         username = login_window.auth_manager.get_current_user() or "用户"
         db_manager = login_window.auth_manager.db_manager
         login_window.close()
-        main_window = MainWindow()
+        
+        # 创建主窗口，传入相同的主题管理器
+        main_window = MainWindow(theme_manager)
         # 设置标题栏显示用户名和数据库管理器
-        main_window.title_bar.set_user_name(username)
-        main_window.title_bar.set_db_manager(db_manager)
-        main_window.show()
+        main_window.set_user_name(username)
+        main_window.set_db_manager(db_manager)
+        # 满屏显示
+        main_window.showMaximized()
 
     # 修改登录窗口的登录成功处理
     login_window.on_login_success = on_login_success
 
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

@@ -1,24 +1,23 @@
 """
 项目管理页面
-提供项目管理的用户界面 - 使用 QFluentWidgets 组件
+提供项目管理的用户界面 - 使用 QSS 主题
 """
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel,
     QWidget, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QMessageBox, QMenu,
-    QAction, QDialog
+    QDialog, QPushButton
 )
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QAction
 
 from ..logic.project_manager import ProjectManager
 from .project_dialog import ProjectDialog
-from ui import StyleSheetManager
 from ui.fluent_widgets import PushButton, PrimaryPushButton, SearchLineEdit
 
 
 class ProjectsPage(QFrame):
-    """项目管理页面"""
+    """项目管理页面 - 使用 QSS 主题"""
     
     def __init__(self, theme_manager=None, db_manager=None):
         super().__init__()
@@ -33,8 +32,7 @@ class ProjectsPage(QFrame):
         
         # 应用主题
         if self.theme_manager:
-            self.theme_manager.add_observer(self.apply_theme)
-            self.apply_theme(self.theme_manager.get_theme())
+            self.theme_manager.add_observer(self.on_theme_changed)
         
         # 注册为项目管理的观察者
         self.project_manager.add_observer(self.on_project_changed)
@@ -61,7 +59,7 @@ class ProjectsPage(QFrame):
         separator = QFrame()
         separator.setFixedHeight(1)
         separator.setFrameShape(QFrame.HLine)
-        self.separator = separator
+        separator.setObjectName("separator")
         layout.addWidget(separator)
         
         # ========== 内容区域 ==========
@@ -80,6 +78,7 @@ class ProjectsPage(QFrame):
         # 标题
         self.title_label = QLabel("📁 项目管理")
         self.title_label.setFont(QFont("Microsoft YaHei", 18, QFont.Bold))
+        self.title_label.setObjectName("titleLabel")
         layout.addWidget(self.title_label)
         
         layout.addStretch()
@@ -201,6 +200,7 @@ class ProjectsPage(QFrame):
         """创建统计卡片"""
         card = QFrame()
         card.setFixedSize(140, 90)
+        card.setObjectName("cardFrame")
         
         layout = QVBoxLayout(card)
         layout.setContentsMargins(12, 10, 12, 10)
@@ -214,6 +214,7 @@ class ProjectsPage(QFrame):
         
         title_label = QLabel(title)
         title_label.setFont(QFont("Microsoft YaHei", 10))
+        title_label.setObjectName("subtitleLabel")
         header_layout.addWidget(title_label)
         header_layout.addStretch()
         
@@ -312,7 +313,7 @@ class ProjectsPage(QFrame):
         self.update_statistics()
     
     def on_table_context_menu(self, position):
-        """表格右键菜单 - 自定义样式"""
+        """表格右键菜单 - 使用 QSS 主题"""
         # 获取点击的行
         row = self.table.rowAt(position.y())
         if row < 0 or row >= len(self.project_ids):
@@ -321,38 +322,8 @@ class ProjectsPage(QFrame):
         # 选中该行
         self.table.selectRow(row)
 
-        # 创建自定义菜单
+        # 创建菜单
         menu = QMenu(self)
-        menu.setWindowFlags(menu.windowFlags() | Qt.FramelessWindowHint)
-        menu.setAttribute(Qt.WA_TranslucentBackground)
-
-        # 获取当前主题
-        theme = self.theme_manager.get_theme() if self.theme_manager else {}
-
-        # 设置菜单样式
-        menu.setStyleSheet(f"""
-            QMenu {{
-                background-color: {theme.get('card_bg', '#2d2d3d')};
-                border: 1px solid {theme.get('border', '#3d3d4d')};
-                border-radius: 8px;
-                padding: 8px;
-            }}
-            QMenu::item {{
-                color: {theme.get('text_primary', '#ffffff')};
-                padding: 10px 20px;
-                border-radius: 6px;
-                font-size: 13px;
-            }}
-            QMenu::item:selected {{
-                background-color: {theme.get('accent', '#6c5ce7')};
-                color: white;
-            }}
-            QMenu::separator {{
-                height: 1px;
-                background-color: {theme.get('border', '#3d3d4d')};
-                margin: 8px 12px;
-            }}
-        """)
 
         # 编辑操作
         edit_action = QAction("✏️  编辑项目", self)
@@ -475,25 +446,7 @@ class ProjectsPage(QFrame):
     
     # ==================== 主题应用 ====================
     
-    def apply_theme(self, theme: dict):
-        """应用主题"""
-        # 页面背景和表格样式
-        self.setStyleSheet(StyleSheetManager.get_projects_page_style(theme))
-        
-        # 分隔线
-        self.separator.setStyleSheet(f"background-color: {theme['border']}; border: none;")
-        
-        # 搜索框样式
-        self.search_input.setStyleSheet(StyleSheetManager.get_projects_input_style(theme))
-        
-        # 按钮样式
-        btn_style = StyleSheetManager.get_projects_btn_style(theme)
-        self.search_btn.setStyleSheet(btn_style)
-        self.new_btn.setStyleSheet(btn_style)
-        self.prev_btn.setStyleSheet(btn_style)
-        self.next_btn.setStyleSheet(btn_style)
-        
-        # 统计卡片样式
-        card_style = StyleSheetManager.get_projects_card_style(theme)
-        for card in self.stat_cards.values():
-            card.setStyleSheet(card_style)
+    def on_theme_changed(self, theme: dict):
+        """主题变化回调 - QSS 已全局加载"""
+        # QSS 样式已通过 ThemeManager.apply_qss() 全局加载
+        pass

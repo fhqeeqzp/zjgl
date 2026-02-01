@@ -1,17 +1,15 @@
 """
-标题栏组件
+标题栏组件 - 使用 QSS 主题
 """
-from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 
-from themes import ThemeManager
-from ui import StyleSheetManager
 from login.ui.dialogs import ChangePasswordDialog
 
 
 class TitleBar(QFrame):
-    """自定义标题栏"""
+    """自定义标题栏 - 使用 QSS 主题"""
 
     def __init__(self, parent=None, theme_manager=None, db_config=None, db_manager=None, username=""):
         super().__init__(parent)
@@ -23,14 +21,17 @@ class TitleBar(QFrame):
         self.drag_pos = None
 
         self.setup_ui()
-        self.theme_manager.add_observer(self.apply_theme)
+        # 监听主题变化
+        if self.theme_manager:
+            self.theme_manager.add_observer(self.on_theme_changed)
 
     def setup_ui(self):
-        self.setFixedHeight(40)
+        self.setFixedHeight(45)
+        self.setObjectName("titleBarFrame")
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(15, 0, 15, 0)
-        layout.setSpacing(10)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         # 标题 - 从数据库读取或使用默认值
         app_name = self.get_app_name_from_db()
@@ -60,28 +61,31 @@ class TitleBar(QFrame):
 
         layout.addWidget(self.user_widget)
 
-        # 窗口控制按钮
+        # 窗口控制按钮 - 使用QSS样式，45x45填满标题栏高度
         self.min_btn = QPushButton("—")
-        self.min_btn.setFixedSize(30, 30)
+        self.min_btn.setObjectName("minimizeButton")
+        self.min_btn.setProperty("class", "titlebar-button")
+        self.min_btn.setFixedSize(45, 45)
         self.min_btn.setCursor(Qt.PointingHandCursor)
         self.min_btn.clicked.connect(self.parent.showMinimized)
 
         self.max_btn = QPushButton("□")
-        self.max_btn.setFixedSize(30, 30)
+        self.max_btn.setObjectName("maximizeButton")
+        self.max_btn.setProperty("class", "titlebar-button")
+        self.max_btn.setFixedSize(45, 45)
         self.max_btn.setCursor(Qt.PointingHandCursor)
         self.max_btn.clicked.connect(self.toggle_maximize)
 
-        self.close_btn = QPushButton("×")
-        self.close_btn.setFixedSize(30, 30)
+        self.close_btn = QPushButton("X")
+        self.close_btn.setObjectName("closeButton")
+        self.close_btn.setProperty("class", "titlebar-button")
+        self.close_btn.setFixedSize(45, 45)
         self.close_btn.setCursor(Qt.PointingHandCursor)
         self.close_btn.clicked.connect(self.parent.close)
 
         layout.addWidget(self.min_btn)
         layout.addWidget(self.max_btn)
         layout.addWidget(self.close_btn)
-
-        # 应用初始主题
-        self.apply_theme(self.theme_manager.get_theme())
 
     def get_app_name_from_db(self):
         """从数据库获取应用名称"""
@@ -98,12 +102,11 @@ class TitleBar(QFrame):
                 pass
         return "主题切换演示程序"
 
-    def apply_theme(self, theme):
-        """应用主题"""
-        self.setStyleSheet(StyleSheetManager.get_titlebar_style(theme))
-        self.close_btn.setStyleSheet(StyleSheetManager.get_close_btn_style(theme))
-        # 应用主题到用户标签
-        self.user_name_label.setStyleSheet(f"color: {theme['text_primary']}; background: transparent;")
+    def on_theme_changed(self, theme):
+        """主题变化回调 - QSS 已全局加载"""
+        # QSS 样式已通过 ThemeManager.apply_qss() 全局加载
+        # 这里只需要处理特殊的动态样式
+        pass
 
     def set_user_name(self, username):
         """设置显示的用户名"""
@@ -120,7 +123,8 @@ class TitleBar(QFrame):
             dialog = ChangePasswordDialog(
                 parent=self.parent,
                 username=self.username,
-                db_manager=self.db_manager
+                db_manager=self.db_manager,
+                theme_manager=self.theme_manager
             )
             dialog.exec_()
 
