@@ -56,6 +56,10 @@ class DatabaseConfig:
 
     def test_connection(self):
         """测试数据库连接"""
-        # 这里可以实现实际的数据库连接测试
-        # 目前返回模拟结果
-        return True, "连接成功"
+        try:
+            from .db_manager import DatabaseManager
+            db_manager = DatabaseManager(self.config)
+            success, message = db_manager.test_connection()
+            return success, message
+        except Exception as e:
+            return False, f"连接测试失败: {str(e)}"

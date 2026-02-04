@@ -75,7 +75,6 @@ QCheckBox::indicator {
 QCheckBox::indicator:checked {
     background-color: #0078D4;
     border: 2px solid #0078D4;
-    image: url(:/icons/check_black.svg);
 }
 
 QRadioButton::indicator {
@@ -84,7 +83,6 @@ QRadioButton::indicator {
 QRadioButton::indicator:checked {
     background-color: #0078D4;
     border: 2px solid #0078D4;
-    image: url(:/icons/radio_checked_black.svg);
 }
 
 QTabBar::tab {
@@ -182,7 +180,6 @@ QMenu {
 #maximizeButton {
     border-left: 0px;
     border-bottom: 0px;
-    transform: rotate(0deg);
 }
 
 /* Restore Button */
@@ -191,7 +188,6 @@ QMenu {
     border-right: 0px;
     border-bottom: 0px;
     border-left: 0px;
-    transform: rotate(0deg);
 }
 
 /* Close Button */
@@ -223,6 +219,14 @@ QMessageBox QLabel {
 QMessageBox QPushButton {
     min-width: 80px;
     min-height: 32px;
+}
+
+/* 项目模块统计卡片样式 - 无圆角，统一1像素内边距 */
+QFrame#cardFrame {
+    border-radius: 0px;
+}
+QFrame#cardFrame QLabel {
+    padding: 1px;
 }
 
 /* Light */

@@ -95,7 +95,8 @@ QComboBox::drop-down {
     border: none;
 }
 QComboBox::down-arrow {
-    image: url(:/icons/arrow_drop_down_white.svg);
+    /* 使用Unicode字符作为下拉箭头 */
+    color: #E6E6E6;
 }
 QComboBox QAbstractItemView {
     background-color: #2D2D2D;
@@ -118,7 +119,6 @@ QCheckBox::indicator {
 QCheckBox::indicator:checked {
     background-color: #0078D4;
     border: 2px solid #0078D4;
-    image: url(:/icons/check_white.svg);
 }
 QCheckBox::indicator:disabled {
     border: 2px solid #555555;
@@ -142,7 +142,6 @@ QRadioButton::indicator {
 QRadioButton::indicator:checked {
     background-color: #0078D4;
     border: 2px solid #0078D4;
-    image: url(:/icons/radio_checked_white.svg);
 }
 
 /* QTabWidget */
@@ -182,18 +181,38 @@ QHeaderView::section {
     border: 1px solid #3A3A3A;
 }
 
-/* QTreeWidget */
+/* QTreeWidget - 树形控件样式 */
 QTreeWidget {
     background-color: #252525;
     alternate-background-color: #2A2A2A;
     color: #E6E6E6;
+    border: 1px solid #444444;
+    border-radius: 8px;
+    padding: 8px;
+    outline: none;
 }
-QTreeWidget::branch {
-    background: #252525;
+
+QTreeWidget::item {
+    height: 32px;
+    padding-left: 4px;
+    border-radius: 4px;
+    margin: 1px 2px;
 }
+
+QTreeWidget::item:hover {
+    background-color: #313244;
+}
+
 QTreeWidget::item:selected {
     background-color: rgba(78, 201, 255, 0.2);
+    color: #4EC9FF;
 }
+
+QTreeWidget::item:selected:active {
+    background-color: rgba(78, 201, 255, 0.3);
+}
+
+/* 树形分支样式 - 保持默认绘制 */
 
 /* QProgressBar */
 QProgressBar {
@@ -313,7 +332,6 @@ QMenu::item:selected {
 #maximizeButton {
     border-left: 0px;
     border-bottom: 0px;
-    transform: rotate(0deg);
 }
 
 /* Restore Button */
@@ -322,7 +340,6 @@ QMenu::item:selected {
     border-right: 0px;
     border-bottom: 0px;
     border-left: 0px;
-    transform: rotate(0deg);
 }
 
 /* Close Button */
@@ -354,6 +371,14 @@ QMessageBox QLabel {
 QMessageBox QPushButton {
     min-width: 80px;
     min-height: 32px;
+}
+
+/* 项目模块统计卡片样式 - 无圆角，统一1像素内边距 */
+QFrame#cardFrame {
+    border-radius: 0px;
+}
+QFrame#cardFrame QLabel {
+    padding: 1px;
 }
 
 

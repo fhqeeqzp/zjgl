@@ -3,6 +3,11 @@
 使用 QSS 文件管理主题
 """
 import sys
+import os
+
+# 抑制Qt警告信息
+os.environ['QT_LOGGING_RULES'] = '*.warning=false;qt.svg.warning=false;qt.png.warning=false'
+
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QStackedWidget, QFrame, QGraphicsDropShadowEffect
@@ -15,6 +20,7 @@ from components import TitleBar, Sidebar, StatusBar, HomePage, SettingsPage, Pla
 from login.ui import LoginWindow
 from login.data.db_config import DatabaseConfig
 from XMGL.ui import ProjectsPage
+from TBGL.ui import BiddingPage
 
 
 class MainWindow(QMainWindow):
@@ -75,14 +81,18 @@ class MainWindow(QMainWindow):
         self.dashboard_page = PlaceholderPage("仪表盘", self.theme_manager)
         # 从login.data.db_manager导入DatabaseManager获取数据库连接
         from login.data.db_manager import DatabaseManager
+        from XMGL.logic.project_manager import ProjectManager
         db_manager = DatabaseManager(self.db_config.get_config()) if self.db_config.get_config().get('is_configured') else None
+        self.project_manager = ProjectManager(db_manager)
         self.projects_page = ProjectsPage(self.theme_manager, db_manager)
+        self.bidding_page = BiddingPage(self.theme_manager, db_manager, self.project_manager)
         self.messages_page = PlaceholderPage("消息", self.theme_manager)
         self.settings_page = SettingsPage(self.theme_manager)
 
         self.stack.addWidget(self.home_page)
         self.stack.addWidget(self.dashboard_page)
         self.stack.addWidget(self.projects_page)
+        self.stack.addWidget(self.bidding_page)
         self.stack.addWidget(self.messages_page)
         self.stack.addWidget(self.settings_page)
 
@@ -97,8 +107,9 @@ class MainWindow(QMainWindow):
         self.sidebar.home_btn.clicked.connect(lambda: self.switch_page(0))
         self.sidebar.dashboard_btn.clicked.connect(lambda: self.switch_page(1))
         self.sidebar.projects_btn.clicked.connect(lambda: self.switch_page(2))
-        self.sidebar.messages_btn.clicked.connect(lambda: self.switch_page(3))
-        self.sidebar.settings_btn.clicked.connect(lambda: self.switch_page(4))
+        self.sidebar.bidding_btn.clicked.connect(lambda: self.switch_page(3))
+        self.sidebar.messages_btn.clicked.connect(lambda: self.switch_page(4))
+        self.sidebar.settings_btn.clicked.connect(lambda: self.switch_page(5))
 
         # 默认选中首页
         self.sidebar.home_btn.setChecked(True)
@@ -113,7 +124,7 @@ class MainWindow(QMainWindow):
         # 更新按钮选中状态
         for i, btn in enumerate(self.sidebar.buttons):
             btn.setChecked(i == index)
-        self.sidebar.settings_btn.setChecked(index == 4)
+        self.sidebar.settings_btn.setChecked(index == 5)
 
     def on_theme_changed(self, theme):
         """主题变化回调 - QSS 已全局加载，这里处理特殊逻辑"""
@@ -151,10 +162,31 @@ class MainWindow(QMainWindow):
         self.title_bar.set_db_manager(db_manager)
 
 
+class DialogFramelessFilter:
+    """对话框无边框过滤器 - 自动为所有对话框设置无边框"""
+
+    def __init__(self, app):
+        self.app = app
+        # 安装事件过滤器到应用程序
+        self.app.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        from PySide6.QtWidgets import QDialog, QMessageBox
+        # 当对话框或消息框创建时，设置无边框
+        if event.type() == 129:  # QEvent.Type.Show (129)
+            if isinstance(obj, (QDialog, QMessageBox)):
+                # 设置无边框窗口，但保留关闭按钮
+                obj.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        return False
+
+
 def main():
     # 创建应用程序
     app = QApplication(sys.argv)
     app.setFont(QFont("Microsoft YaHei", 10))
+
+    # 安装对话框无边框过滤器
+    dialog_filter = DialogFramelessFilter(app)
 
     # 创建主题管理器并设置应用程序（自动加载 QSS）
     theme_manager = ThemeManager()

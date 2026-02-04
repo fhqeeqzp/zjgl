@@ -16,6 +16,7 @@ class DatabaseManager:
     def test_connection(self):
         """测试数据库连接"""
         try:
+            # 先尝试连接MySQL服务器（不指定数据库）
             conn = pymysql.connect(
                 host=self.config.get('host', 'localhost'),
                 port=self.config.get('port', 3306),
@@ -25,8 +26,21 @@ class DatabaseManager:
                 cursorclass=DictCursor,
                 connect_timeout=5
             )
+            
+            # 检查数据库是否存在
+            cursor = conn.cursor()
+            db_name = self.config.get('database', 'myapp')
+            cursor.execute(f"SHOW DATABASES LIKE '{db_name}'")
+            exists = cursor.fetchone()
+            
+            cursor.close()
             conn.close()
-            return True, "连接成功"
+            
+            if exists:
+                return True, "连接成功，数据库存在"
+            else:
+                return True, "连接成功，但数据库不存在，将自动创建"
+                
         except pymysql.Error as e:
             return False, f"连接失败: {str(e)}"
 
@@ -179,15 +193,19 @@ class DatabaseManager:
     def get_connection(self):
         """获取数据库连接"""
         if not self.connection or not self.connection.open:
-            self.connection = pymysql.connect(
-                host=self.config.get('host', 'localhost'),
-                port=self.config.get('port', 3306),
-                database=self.config.get('database', 'myapp'),
-                user=self.config.get('username', 'root'),
-                password=self.config.get('password', ''),
-                charset='utf8mb4',
-                cursorclass=DictCursor
-            )
+            try:
+                self.connection = pymysql.connect(
+                    host=self.config.get('host', 'localhost'),
+                    port=self.config.get('port', 3306),
+                    database=self.config.get('database', 'myapp'),
+                    user=self.config.get('username', 'root'),
+                    password=self.config.get('password', ''),
+                    charset='utf8mb4',
+                    cursorclass=DictCursor
+                )
+            except pymysql.Error as e:
+                # 如果数据库不存在，抛出异常让上层处理
+                raise Exception(f"无法连接到数据库: {str(e)}")
         return self.connection
 
     def close(self):
@@ -197,24 +215,30 @@ class DatabaseManager:
 
     def execute_query(self, sql, params=None):
         """执行查询语句"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
         try:
-            cursor.execute(sql, params)
-            return cursor.fetchall()
-        finally:
-            cursor.close()
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute(sql, params)
+                return cursor.fetchall()
+            finally:
+                cursor.close()
+        except Exception as e:
+            raise Exception(f"数据库查询失败: {str(e)}")
 
     def execute_update(self, sql, params=None):
         """执行更新语句"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
         try:
-            cursor.execute(sql, params)
-            conn.commit()
-            return cursor.rowcount
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute(sql, params)
+                conn.commit()
+                return cursor.rowcount
+            except Exception as e:
+                conn.rollback()
+                raise Exception(f"数据库更新失败: {str(e)}")
+            finally:
+                cursor.close()
         except Exception as e:
-            conn.rollback()
-            raise e
-        finally:
-            cursor.close()
+            raise Exception(f"数据库操作失败: {str(e)}")

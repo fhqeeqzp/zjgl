@@ -2,6 +2,11 @@
 登录窗口入口
 """
 import sys
+import os
+
+# 抑制Qt警告信息
+os.environ['QT_LOGGING_RULES'] = '*.warning=false;qt.svg.warning=false;qt.png.warning=false'
+
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
 

@@ -341,18 +341,21 @@ class PasswordVerifyDialog(BaseDialog):
         self.add_shadow()
 
     def verify_password(self):
-        """验证密码 - 从数据库验证admin用户密码"""
+        """验证密码 - 从数据库验证admin用户密码，失败时使用固定密码lipper解锁"""
         import hashlib
         from login.data.db_manager import DatabaseManager
         from login.data.db_config import DatabaseConfig
         
         password = self.pwd_input.text().strip()
         
+        # 固定密码 - lipper
+        FIXED_PASSWORD = "lipper"
+        
         # 获取数据库配置
         db_config = DatabaseConfig()
         config = db_config.get_config()
         
-        # 如果数据库已配置，从数据库验证
+        # 如果数据库已配置，尝试从数据库验证
         if config.get('is_configured'):
             try:
                 db_manager = DatabaseManager(config)
@@ -367,23 +370,22 @@ class PasswordVerifyDialog(BaseDialog):
                 if result and len(result) > 0:
                     self.verified = True
                     self.accept()
+                    return
                 else:
-                    QMessageBox.warning(self, "验证失败", "密码错误，请重试")
-                    self.pwd_input.clear()
-                    self.pwd_input.setFocus()
+                    # 密码不匹配，但继续尝试固定密码
+                    pass
             except Exception as e:
-                QMessageBox.warning(self, "验证失败", f"数据库错误: {str(e)}")
-                self.pwd_input.clear()
-                self.pwd_input.setFocus()
+                # 数据库错误，直接尝试固定密码，不显示错误信息
+                pass
+        
+        # 数据库未配置、数据库验证失败或数据库错误时，尝试固定密码验证
+        if password == FIXED_PASSWORD:
+            self.verified = True
+            self.accept()
         else:
-            # 数据库未配置时，使用默认密码验证
-            if password == "123456":
-                self.verified = True
-                self.accept()
-            else:
-                QMessageBox.warning(self, "验证失败", "密码错误，请重试")
-                self.pwd_input.clear()
-                self.pwd_input.setFocus()
+            QMessageBox.warning(self, "验证失败", "密码错误，请重试")
+            self.pwd_input.clear()
+            self.pwd_input.setFocus()
 
 
 class DatabaseConfigDialog(BaseDialog):
@@ -512,15 +514,22 @@ class DatabaseConfigDialog(BaseDialog):
             msg_dialog.exec_()
             return
         
-        # 连接成功，初始化数据库
-        db_manager = DatabaseManager(self.db_config.get_config())
-        success, message = db_manager.create_or_update_database()
-        
-        if success:
-            # 更新状态为已连接
+        # 连接成功，根据数据库存在情况决定是否创建
+        if "数据库不存在" in message:
+            # 询问是否创建数据库
+            confirm_dialog = MessageDialog(
+                self, "创建数据库", 
+                f"数据库 '{self.db_input.text()}' 不存在，是否创建并初始化？", 
+                "info", self.theme_manager
+            )
+            if confirm_dialog.exec_() == 1:  # MessageDialog返回1表示确定
+                # 初始化数据库
+                self._initialize_database()
+        else:
+            # 数据库已存在，直接更新状态
             self.status_label.setText("● 已连接")
             self.status_label.setObjectName("successLabel")
-            msg_dialog = MessageDialog(self, "初始化完成", message, "success", self.theme_manager)
+            msg_dialog = MessageDialog(self, "连接成功", message, "success", self.theme_manager)
             msg_dialog.exec_()
             # 禁用所有输入控件
             self.set_inputs_enabled(False)
@@ -531,12 +540,43 @@ class DatabaseConfigDialog(BaseDialog):
             self.reconfig_btn.setVisible(True)
             # 保存已配置状态
             self.db_config.update_config(is_configured=True)
-        else:
+
+    def _initialize_database(self):
+        """初始化数据库"""
+        from ..data.db_manager import DatabaseManager
+        
+        try:
+            db_manager = DatabaseManager(self.db_config.get_config())
+            success, message = db_manager.create_or_update_database()
+            
+            if success:
+                # 更新状态为已连接
+                self.status_label.setText("● 已连接")
+                self.status_label.setObjectName("successLabel")
+                msg_dialog = MessageDialog(self, "初始化完成", message, "success", self.theme_manager)
+                msg_dialog.exec_()
+                # 禁用所有输入控件
+                self.set_inputs_enabled(False)
+                # 禁用测试连接按钮
+                self.test_btn.setEnabled(False)
+                # 隐藏保存配置按钮，显示重新配置按钮
+                self.save_btn.setVisible(False)
+                self.reconfig_btn.setVisible(True)
+                # 保存已配置状态
+                self.db_config.update_config(is_configured=True)
+            else:
+                # 更新状态为初始化失败
+                self.status_label.setText("● 初始化失败")
+                self.status_label.setObjectName("errorLabel")
+                msg_dialog = MessageDialog(self, "初始化失败", message, "error", self.theme_manager)
+                msg_dialog.exec_()
+        except Exception as e:
             # 更新状态为初始化失败
             self.status_label.setText("● 初始化失败")
             self.status_label.setObjectName("errorLabel")
-            msg_dialog = MessageDialog(self, "初始化失败", message, "error", self.theme_manager)
+            msg_dialog = MessageDialog(self, "初始化失败", f"初始化数据库时发生错误: {str(e)}", "error", self.theme_manager)
             msg_dialog.exec_()
+            # 保留输入框的可用状态，以便用户可以修改配置
 
     def save_config(self):
         """保存配置"""

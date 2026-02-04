@@ -72,9 +72,10 @@ class Sidebar(QFrame):
         self.home_btn = SidebarButton("首页", "🏠", self.theme_manager)
         self.dashboard_btn = SidebarButton("仪表盘", "📊", self.theme_manager)
         self.projects_btn = SidebarButton("项目", "📁", self.theme_manager)
+        self.bidding_btn = SidebarButton("投标", "📋", self.theme_manager)
         self.messages_btn = SidebarButton("消息", "💬", self.theme_manager)
 
-        self.buttons.extend([self.home_btn, self.dashboard_btn, self.projects_btn, self.messages_btn])
+        self.buttons.extend([self.home_btn, self.dashboard_btn, self.projects_btn, self.bidding_btn, self.messages_btn])
 
         for btn in self.buttons:
             layout.addWidget(btn)

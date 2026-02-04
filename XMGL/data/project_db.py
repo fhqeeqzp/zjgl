@@ -455,6 +455,15 @@ class ProjectDatabase:
         
         try:
             import json
+            from decimal import Decimal
+            
+            # 自定义JSON编码器，处理Decimal类型
+            class DecimalEncoder(json.JSONEncoder):
+                def default(self, obj):
+                    if isinstance(obj, Decimal):
+                        return float(obj)
+                    return super().default(obj)
+            
             sql = """
                 INSERT INTO project_logs (project_id, action_type, action_desc, old_value, new_value)
                 VALUES (%s, %s, %s, %s, %s)
@@ -463,8 +472,8 @@ class ProjectDatabase:
                 project_id,
                 action_type,
                 action_desc,
-                json.dumps(old_value, ensure_ascii=False) if old_value else None,
-                json.dumps(new_value, ensure_ascii=False) if new_value else None,
+                json.dumps(old_value, ensure_ascii=False, cls=DecimalEncoder) if old_value else None,
+                json.dumps(new_value, ensure_ascii=False, cls=DecimalEncoder) if new_value else None,
             )
             self.db_manager.execute_update(sql, params)
         except Exception as e:

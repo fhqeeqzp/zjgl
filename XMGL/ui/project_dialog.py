@@ -2,10 +2,15 @@
 项目编辑对话框
 用于新建和编辑项目信息 - 使用 QSS 主题
 """
+import os
+import shutil
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QFormLayout, QGroupBox, QMessageBox,
-    QFileDialog, QWidget, QGridLayout, QFrame, QPushButton
+    QFileDialog, QWidget, QGridLayout, QFrame, QPushButton,
+    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView
 )
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont
@@ -35,6 +40,13 @@ class ProjectDialog(QDialog):
         self.theme_manager = theme_manager
         self.project = None
         self.drag_pos = None
+
+        # WD文件夹基础路径
+        self.wd_base_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "WD")
+
+        # 存储附件文件列表
+        self.bid_files = []  # 投标附件文件列表
+        self.construction_files = []  # 施工附件文件列表
 
         # 如果是编辑模式，加载项目数据
         if project_id:
@@ -168,34 +180,75 @@ class ProjectDialog(QDialog):
         date_layout.addStretch()
         form_layout.addRow(date_group)
 
-        # 附件信息组
-        attachment_group = QGroupBox("附件信息")
-        attachment_layout = QVBoxLayout(attachment_group)
-        attachment_layout.setSpacing(10)
+        # ========== 附件区域（投标附件和施工附件并排） ==========
+        attachment_layout = QHBoxLayout()
+        attachment_layout.setSpacing(20)
 
-        bid_file_layout = QHBoxLayout()
-        bid_file_layout.addWidget(QLabel("投标附件:"))
-        self.bid_attachment = LineEdit()
-        self.bid_attachment.setReadOnly(True)
-        bid_file_layout.addWidget(self.bid_attachment)
-        self.bid_file_btn = PushButton("选择文件")
-        self.bid_file_btn.setObjectName("secondaryButton")
-        self.bid_file_btn.clicked.connect(lambda: self.select_file("bid"))
-        bid_file_layout.addWidget(self.bid_file_btn)
-        attachment_layout.addLayout(bid_file_layout)
+        # 投标附件区域
+        bid_group = QGroupBox("投标附件")
+        bid_layout = QVBoxLayout(bid_group)
+        bid_layout.setSpacing(10)
 
-        construction_file_layout = QHBoxLayout()
-        construction_file_layout.addWidget(QLabel("施工附件:"))
-        self.construction_attachment = LineEdit()
-        self.construction_attachment.setReadOnly(True)
-        construction_file_layout.addWidget(self.construction_attachment)
-        self.construction_file_btn = PushButton("选择文件")
-        self.construction_file_btn.setObjectName("secondaryButton")
-        self.construction_file_btn.clicked.connect(lambda: self.select_file("construction"))
-        construction_file_layout.addWidget(self.construction_file_btn)
-        attachment_layout.addLayout(construction_file_layout)
+        # 投标附件表格
+        self.bid_table = QTableWidget()
+        self.bid_table.setColumnCount(3)
+        self.bid_table.setHorizontalHeaderLabels(["序号", "文件名", "操作"])
+        self.bid_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.bid_table.verticalHeader().setVisible(False)
+        self.bid_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.bid_table.setMaximumHeight(150)
 
-        form_layout.addRow(attachment_group)
+        # 设置列宽
+        header = self.bid_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Fixed)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.Fixed)
+        self.bid_table.setColumnWidth(0, 50)
+        self.bid_table.setColumnWidth(2, 60)
+
+        bid_layout.addWidget(self.bid_table)
+
+        # 投标附件上传按钮
+        self.bid_upload_btn = PushButton("➕ 上传文件")
+        self.bid_upload_btn.setObjectName("secondaryButton")
+        self.bid_upload_btn.clicked.connect(lambda: self.upload_file("bid"))
+        bid_layout.addWidget(self.bid_upload_btn)
+
+        attachment_layout.addWidget(bid_group, 1)
+
+        # 施工附件区域
+        construction_group = QGroupBox("施工附件")
+        construction_layout = QVBoxLayout(construction_group)
+        construction_layout.setSpacing(10)
+
+        # 施工附件表格
+        self.construction_table = QTableWidget()
+        self.construction_table.setColumnCount(3)
+        self.construction_table.setHorizontalHeaderLabels(["序号", "文件名", "操作"])
+        self.construction_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.construction_table.verticalHeader().setVisible(False)
+        self.construction_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.construction_table.setMaximumHeight(150)
+
+        # 设置列宽
+        header2 = self.construction_table.horizontalHeader()
+        header2.setSectionResizeMode(0, QHeaderView.Fixed)
+        header2.setSectionResizeMode(1, QHeaderView.Stretch)
+        header2.setSectionResizeMode(2, QHeaderView.Fixed)
+        self.construction_table.setColumnWidth(0, 50)
+        self.construction_table.setColumnWidth(2, 60)
+
+        construction_layout.addWidget(self.construction_table)
+
+        # 施工附件上传按钮
+        self.construction_upload_btn = PushButton("➕ 上传文件")
+        self.construction_upload_btn.setObjectName("secondaryButton")
+        self.construction_upload_btn.clicked.connect(lambda: self.upload_file("construction"))
+        construction_layout.addWidget(self.construction_upload_btn)
+
+        attachment_layout.addWidget(construction_group, 1)
+
+        form_layout.addRow(attachment_layout)
 
         # 备注
         self.remark_input = TextEdit()
@@ -264,8 +317,9 @@ class ProjectDialog(QDialog):
                                                self.project.completion_date.month,
                                                self.project.completion_date.day))
 
-        self.bid_attachment.setText(self.project.bid_attachment)
-        self.construction_attachment.setText(self.project.construction_attachment)
+        # 加载附件文件列表
+        self.load_attachment_files()
+
         self.remark_input.setPlainText(self.project.remark)
 
     def on_manual_code_toggle(self, checked):
@@ -274,20 +328,140 @@ class ProjectDialog(QDialog):
         if not checked:
             self.code_input.setText(self.project_manager.generate_project_code())
 
-    def select_file(self, file_type: str):
-        """选择文件"""
-        file_path, _ = QFileDialog.getOpenFileName(
+    def get_project_name(self) -> str:
+        """获取项目名称"""
+        if self.project_id and self.project:
+            return self.project.name
+        return self.name_input.text().strip() or "新建项目"
+
+    def get_attachment_folder(self, file_type: str) -> str:
+        """获取附件文件夹路径"""
+        project_name = self.get_project_name()
+        folder_name = "投标附件" if file_type == "bid" else "施工附件"
+        folder_path = os.path.join(self.wd_base_path, project_name, folder_name)
+        os.makedirs(folder_path, exist_ok=True)
+        return folder_path
+
+    def load_attachment_files(self):
+        """加载附件文件列表到表格"""
+        # 加载投标附件
+        self.bid_files = self._get_files_from_folder("bid")
+        self._refresh_table(self.bid_table, self.bid_files, "bid")
+
+        # 加载施工附件
+        self.construction_files = self._get_files_from_folder("construction")
+        self._refresh_table(self.construction_table, self.construction_files, "construction")
+
+    def _get_files_from_folder(self, file_type: str) -> list:
+        """从文件夹获取文件列表"""
+        folder_path = self.get_attachment_folder(file_type)
+        if not os.path.exists(folder_path):
+            return []
+
+        files = []
+        for item in sorted(os.listdir(folder_path)):
+            item_path = os.path.join(folder_path, item)
+            if os.path.isfile(item_path):
+                files.append({
+                    'name': item,
+                    'path': item_path
+                })
+        return files
+
+    def _refresh_table(self, table: QTableWidget, files: list, file_type: str):
+        """刷新表格显示"""
+        table.setRowCount(len(files))
+        for row, file_info in enumerate(files):
+            # 序号
+            item_no = QTableWidgetItem(str(row + 1))
+            item_no.setTextAlignment(Qt.AlignCenter)
+            table.setItem(row, 0, item_no)
+
+            # 文件名
+            item_name = QTableWidgetItem(file_info['name'])
+            item_name.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            table.setItem(row, 1, item_name)
+
+            # 删除按钮
+            delete_btn = PushButton("🗑️")
+            delete_btn.setFixedSize(40, 28)
+            delete_btn.setObjectName("dangerButton")
+            delete_btn.setCursor(Qt.PointingHandCursor)
+            delete_btn.clicked.connect(lambda checked, r=row, t=file_type: self.delete_file(r, t))
+            table.setCellWidget(row, 2, delete_btn)
+
+    def upload_file(self, file_type: str):
+        """上传文件"""
+        file_paths, _ = QFileDialog.getOpenFileNames(
             self, "选择文件", "",
             "所有文件 (*.*);;PDF文件 (*.pdf);;Word文档 (*.doc *.docx);;Excel表格 (*.xls *.xlsx)"
         )
-        if file_path:
-            if file_type == "bid":
-                self.bid_attachment.setText(file_path)
-            else:
-                self.construction_attachment.setText(file_path)
+
+        if not file_paths:
+            return
+
+        try:
+            target_folder = self.get_attachment_folder(file_type)
+            uploaded_count = 0
+
+            for file_path in file_paths:
+                file_name = os.path.basename(file_path)
+                target_path = os.path.join(target_folder, file_name)
+
+                # 如果文件已存在，添加序号
+                counter = 1
+                original_name, ext = os.path.splitext(file_name)
+                while os.path.exists(target_path):
+                    target_path = os.path.join(target_folder, f"{original_name}_{counter}{ext}")
+                    counter += 1
+
+                # 复制文件
+                shutil.copy2(file_path, target_path)
+                uploaded_count += 1
+
+            # 刷新表格
+            self.load_attachment_files()
+
+            QMessageBox.information(self, "上传成功", f"成功上传 {uploaded_count} 个文件")
+
+        except Exception as e:
+            QMessageBox.critical(self, "上传失败", f"文件上传失败: {e}")
+
+    def delete_file(self, row: int, file_type: str):
+        """删除文件"""
+        files = self.bid_files if file_type == "bid" else self.construction_files
+        if row < 0 or row >= len(files):
+            return
+
+        file_info = files[row]
+        file_name = file_info['name']
+
+        # 确认删除
+        reply = QMessageBox.question(
+            self, "确认删除",
+            f"确定要删除文件 [{file_name}] 吗？\n此操作不可恢复！",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                file_path = file_info['path']
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+
+                # 刷新表格
+                self.load_attachment_files()
+
+                QMessageBox.information(self, "成功", "文件已删除")
+            except Exception as e:
+                QMessageBox.critical(self, "失败", f"删除失败: {e}")
 
     def on_save(self):
         """保存项目"""
+        # 确保文件夹与项目名同步（如果项目名改变）
+        self._sync_attachment_folders()
+
         project_data = {
             'project_code': self.code_input.text().strip(),
             'name': self.name_input.text().strip(),
@@ -295,8 +469,8 @@ class ProjectDialog(QDialog):
             'status': self.status_combo.currentText(),
             'start_date': self.start_date.date().toString('yyyy-MM-dd'),
             'completion_date': self.completion_date.date().toString('yyyy-MM-dd'),
-            'bid_attachment': self.bid_attachment.text(),
-            'construction_attachment': self.construction_attachment.text(),
+            'bid_attachment': self.get_attachment_folder("bid"),
+            'construction_attachment': self.get_attachment_folder("construction"),
             'remark': self.remark_input.toPlainText().strip(),
         }
 
@@ -315,6 +489,28 @@ class ProjectDialog(QDialog):
             self.accept()
         else:
             QMessageBox.critical(self, "失败", f"保存失败: {msg}")
+
+    def _sync_attachment_folders(self):
+        """同步附件文件夹（当项目名称改变时）"""
+        if not self.project_id or not self.project:
+            return
+
+        old_name = self.project.name
+        new_name = self.name_input.text().strip()
+
+        if old_name == new_name or not new_name:
+            return
+
+        try:
+            old_base_path = os.path.join(self.wd_base_path, old_name)
+            new_base_path = os.path.join(self.wd_base_path, new_name)
+
+            if os.path.exists(old_base_path) and not os.path.exists(new_base_path):
+                # 重命名文件夹
+                os.rename(old_base_path, new_base_path)
+                print(f"附件文件夹已同步: {old_name} -> {new_name}")
+        except Exception as e:
+            print(f"同步附件文件夹失败: {e}")
 
     def on_theme_changed(self, theme: dict):
         """主题变化回调 - QSS 已全局加载"""
