@@ -3,12 +3,26 @@
 支持树形结构的汇总表编辑
 """
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QTreeWidget, QTreeWidgetItem, QHeaderView,
-    QAbstractItemView, QLineEdit, QComboBox,
-    QMessageBox, QMenu, QPushButton, QDoubleSpinBox,
-    QGroupBox, QFormLayout, QWidget, QSplitter
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QHeaderView,
+    QAbstractItemView,
+    QLineEdit,
+    QComboBox,
+    QMenu,
+    QPushButton,
+    QDoubleSpinBox,
+    QGroupBox,
+    QFormLayout,
+    QWidget,
+    QSplitter
 )
+
+from ui.message_dialog import MessageDialog
 from PySide6.QtCore import Qt, QItemSelectionModel
 from PySide6.QtGui import QFont, QAction
 
@@ -21,6 +35,7 @@ class SummaryEditDialog(QDialog):
 
     def __init__(self, bidding_id: int, bidding_code: str, summary: BiddingSummary = None, parent=None):
         super().__init__(parent)
+        self.setObjectName("summaryEditDialog")
         self.bidding_id = bidding_id
         self.bidding_code = bidding_code
         self.summary = summary or BiddingSummary(bidding_id=bidding_id)
@@ -56,7 +71,8 @@ class SummaryEditDialog(QDialog):
         # 总价显示
         info_layout.addWidget(QLabel("总价:"))
         self.total_label = QLabel("¥ 0.00")
-        self.total_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #e74c3c;")
+        self.total_label.setObjectName("totalLabel")
+        self.total_label.setProperty("large", "true")
         info_layout.addWidget(self.total_label)
 
         layout.addLayout(info_layout)
@@ -176,7 +192,7 @@ class SummaryEditDialog(QDialog):
 
         # 金额（只读）
         self.amount_label = QLabel("¥ 0.00")
-        self.amount_label.setStyleSheet("font-weight: bold; color: #e74c3c;")
+        self.amount_label.setObjectName("amountLabel")
         form_layout.addRow("金额:", self.amount_label)
 
         edit_layout.addWidget(edit_group)
@@ -363,11 +379,11 @@ class SummaryEditDialog(QDialog):
         current = self.tree.currentItem()
         if not current:
             msg_box = QMessageBox(self)
-        msg_box.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        msg_box.setIcon(QMessageBox.Warning)
-        msg_box.setWindowTitle("提示")
-        msg_box.setText("请先选择一个节点")
-        msg_box.exec()
+            msg_box.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+            msg_box.setIcon(QMessageBox.Warning)
+            msg_box.setWindowTitle("提示")
+            msg_box.setText("请先选择一个节点")
+            msg_box.exec()
             return
 
         tree_item = QTreeWidgetItem(current)
@@ -387,21 +403,20 @@ class SummaryEditDialog(QDialog):
         current = self.tree.currentItem()
         if not current:
             msg_box = QMessageBox(self)
-        msg_box.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        msg_box.setIcon(QMessageBox.Warning)
-        msg_box.setWindowTitle("提示")
-        msg_box.setText("请先选择要删除的节点")
-        msg_box.exec()
+            msg_box.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+            msg_box.setIcon(QMessageBox.Warning)
+            msg_box.setWindowTitle("提示")
+            msg_box.setText("请先选择要删除的节点")
+            msg_box.exec()
             return
 
-        reply = QMessageBox.question(
-            self, "确认删除",
-            "确定要删除选中的项目吗？\n（如果是章节，将同时删除其下的所有子项目）",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+        reply = MessageDialog.question(
+            self, "确认删除", "确定要删除选中的项目吗？\n（如果是章节，将同时删除其下的所有子项目）",
+            MessageDialog.Yes | MessageDialog.No,
+            MessageDialog.No
         )
 
-        if reply == QMessageBox.Yes:
+        if reply == MessageDialog.Yes:
             parent = current.parent()
             if parent:
                 parent.removeChild(current)
@@ -413,14 +428,13 @@ class SummaryEditDialog(QDialog):
 
     def clear_all(self):
         """清空全部"""
-        reply = QMessageBox.question(
-            self, "确认清空",
-            "确定要清空所有项目吗？\n此操作不可恢复！",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+        reply = MessageDialog.question(
+            self, "确认清空", "确定要清空所有项目吗？\n此操作不可恢复！",
+            MessageDialog.Yes | MessageDialog.No,
+            MessageDialog.No
         )
 
-        if reply == QMessageBox.Yes:
+        if reply == MessageDialog.Yes:
             self.tree.clear()
             self.calculate_total()
 
@@ -479,11 +493,11 @@ class SummaryEditDialog(QDialog):
         current = self.tree.currentItem()
         if not current:
             msg_box = QMessageBox(self)
-        msg_box.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        msg_box.setIcon(QMessageBox.Warning)
-        msg_box.setWindowTitle("提示")
-        msg_box.setText("请先选择一个节点")
-        msg_box.exec()
+            msg_box.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+            msg_box.setIcon(QMessageBox.Warning)
+            msg_box.setWindowTitle("提示")
+            msg_box.setText("请先选择一个节点")
+            msg_box.exec()
             return
 
         item = current.data(0, Qt.UserRole)
@@ -600,4 +614,4 @@ class SummaryEditDialog(QDialog):
         msg_box.setWindowTitle("成功")
         msg_box.setText("汇总表已保存")
         msg_box.exec()
-            self.accept()
+        self.accept()

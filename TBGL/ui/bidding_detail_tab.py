@@ -4,12 +4,24 @@
 使用树形表格展示层级结构，支持Excel导入
 """
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QTreeWidget, QTreeWidgetItem, QHeaderView,
-    QAbstractItemView, QMenu, QMessageBox, QDialog,
-    QCheckBox, QScrollArea, QGridLayout, QFrame,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QHeaderView,
+    QAbstractItemView,
+    QMenu,
+    QDialog,
+    QCheckBox,
+    QScrollArea,
+    QGridLayout,
+    QFrame,
     QApplication
 )
+
+from ui.message_dialog import MessageDialog
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QAction
 
@@ -107,30 +119,21 @@ class ColumnSettingsDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         
         # 设置对话框样式
-        self.setStyleSheet("""
-            QDialog { background-color: #2b2b2b; color: #ffffff; }
-            QLabel { color: #ffffff; background-color: transparent; font-size: 13px; }
-            QCheckBox { color: #ffffff; background-color: transparent; spacing: 8px; }
-            QCheckBox::indicator { width: 18px; height: 18px; }
-            QCheckBox::indicator:unchecked { border: 2px solid #555555; background-color: #3c3c3c; border-radius: 3px; }
-            QCheckBox::indicator:checked { border: 2px solid #4EC9FF; background-color: #4EC9FF; border-radius: 3px; }
-            QScrollArea { border: none; background-color: transparent; }
-            QFrame { background-color: #3c3c3c; border-radius: 8px; }
-        """)
+        self.setObjectName("columnSelectDialog")
         
         # 标题
         title_label = QLabel("请选择要显示的列：")
-        title_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #4EC9FF;")
+        title_label.setObjectName("titleLabel")
         layout.addWidget(title_label)
-        
+
         # 说明文字
         hint_label = QLabel("💡 提示：分部分项工程名称、规格型号、项目特征描述会自动调整列宽显示全部内容")
-        hint_label.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+        hint_label.setObjectName("hintLabel")
         layout.addWidget(hint_label)
         
         # 缩进列和序号列说明（始终显示）
         indent_hint = QLabel("ℹ️ 层级缩进列和序号列始终显示")
-        indent_hint.setStyleSheet("color: #4EC9FF; font-size: 11px;")
+        indent_hint.setObjectName("indentHintLabel")
         layout.addWidget(indent_hint)
         
         # 滚动区域
@@ -255,7 +258,7 @@ class BiddingDetailTab(QWidget):
         # 提示信息
         self.tip_label = QLabel("请先选择投标项目，或在汇总表中双击行查看明细")
         self.tip_label.setAlignment(Qt.AlignCenter)
-        self.tip_label.setStyleSheet("color: #999; font-size: 16px; padding: 50px;")
+        self.tip_label.setObjectName("tipLabel")
         layout.addWidget(self.tip_label)
 
         # 明细内容区域（初始隐藏）
@@ -274,16 +277,16 @@ class BiddingDetailTab(QWidget):
         bidding_info_layout = QHBoxLayout()
         bidding_info_layout.addWidget(QLabel("投标编码:"))
         self.bidding_code_label = QLabel("")
-        self.bidding_code_label.setStyleSheet("font-weight: bold; color: #4EC9FF;")
+        self.bidding_code_label.setObjectName("biddingCodeLabel")
         bidding_info_layout.addWidget(self.bidding_code_label)
-        
+
         bidding_info_layout.addSpacing(30)
-        
+
         bidding_info_layout.addWidget(QLabel("投标名称:"))
         self.bidding_name_label = QLabel("")
-        self.bidding_name_label.setStyleSheet("font-weight: bold; color: #4EC9FF;")
+        self.bidding_name_label.setObjectName("biddingNameLabel")
         bidding_info_layout.addWidget(self.bidding_name_label)
-        
+
         bidding_info_layout.addStretch()
         info_layout.addLayout(bidding_info_layout)
 
@@ -291,7 +294,7 @@ class BiddingDetailTab(QWidget):
         project_info_layout = QHBoxLayout()
         project_info_layout.addWidget(QLabel("工程项目及费用名称:"))
         self.project_item_label = QLabel("")
-        self.project_item_label.setStyleSheet("font-weight: bold; color: #CE9178; font-size: 14px;")
+        self.project_item_label.setObjectName("projectItemLabel")
         project_info_layout.addWidget(self.project_item_label)
         project_info_layout.addStretch()
         info_layout.addLayout(project_info_layout)
@@ -322,7 +325,7 @@ class BiddingDetailTab(QWidget):
         # 合计金额显示
         excel_toolbar.addWidget(QLabel("合计:"))
         self.total_label = QLabel("¥ 0.00")
-        self.total_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #e74c3c;")
+        self.total_label.setObjectName("totalLabel")
         excel_toolbar.addWidget(self.total_label)
 
         content_layout.addLayout(excel_toolbar)
@@ -394,36 +397,7 @@ class BiddingDetailTab(QWidget):
         self.detail_tree.setUniformRowHeights(True)  # 统一行高
 
         # 设置样式
-        self.detail_tree.setStyleSheet("""
-            QTreeWidget {
-                background-color: #252525;
-                alternate-background-color: #2A2A2A;
-                color: #E6E6E6;
-                border: 1px solid #444444;
-                border-radius: 8px;
-                padding: 8px;
-            }
-            QTreeWidget::item {
-                height: 32px;
-                padding-left: 4px;
-                border-radius: 4px;
-                margin: 1px 2px;
-            }
-            QTreeWidget::item:hover {
-                background-color: #313244;
-            }
-            QTreeWidget::item:selected {
-                background-color: rgba(78, 201, 255, 0.2);
-                color: #4EC9FF;
-            }
-            QTreeWidget QHeaderView::section {
-                background-color: #333333;
-                color: #E6E6E6;
-                padding: 6px;
-                border: 1px solid #444444;
-                font-weight: bold;
-            }
-        """)
+        self.detail_tree.setObjectName("detailTree")
 
         self.detail_tree.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.detail_tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
@@ -716,29 +690,10 @@ class BiddingDetailTab(QWidget):
         progress.setWindowTitle("导入进度")
         progress.setMinimumDuration(0)
         progress.setValue(0)
-        
+        progress.setMinimumSize(600, 200)
+
         # 设置样式
-        progress.setStyleSheet("""
-            QProgressDialog { background-color: #2b2b2b; color: #ffffff; }
-            QLabel { color: #ffffff; }
-            QProgressBar { 
-                border: 1px solid #555555; 
-                border-radius: 4px; 
-                background-color: #3c3c3c; 
-                height: 20px;
-            }
-            QProgressBar::chunk { 
-                background-color: #4EC9FF; 
-                border-radius: 3px;
-            }
-            QPushButton { 
-                background-color: #3c3c3c; 
-                color: #ffffff; 
-                border: 1px solid #555555;
-                padding: 5px 15px;
-                border-radius: 4px;
-            }
-        """)
+        progress.setObjectName("importProgressDialog")
         
         # 使用栈构建层级结构
         stack = [(0, None)]  # (层级, 父节点)
@@ -840,12 +795,12 @@ class BiddingDetailTab(QWidget):
     def on_import_excel(self):
         """导入Excel明细"""
         if not self.current_bidding_id:
-            QMessageBox.warning(self, "提示", "请先选择投标")
+            MessageDialog.warning(self, "提示", "请先选择投标")
             return
 
         excel_path = self.excel_selector.get_selected_file()
         if not excel_path:
-            QMessageBox.warning(self, "提示", "请先选择Excel文件")
+            MessageDialog.warning(self, "提示", "请先选择Excel文件")
             return
 
         # 打开导入对话框，传入汇总项名称作为顶级行名称
@@ -855,12 +810,12 @@ class BiddingDetailTab(QWidget):
             imported_data = dialog.get_imported_data()
             if imported_data:
                 self.build_tree_from_imported_data(imported_data)
-                QMessageBox.information(self, "成功", f"成功导入 {len(imported_data)} 条明细数据")
+                MessageDialog.information(self, "成功", f"成功导入 {len(imported_data)} 条明细数据")
 
     def reset_all_to_level_one(self):
         """将所有节点重置为级别1"""
         if not self.current_bidding_id:
-            QMessageBox.warning(self, "提示", "请先选择投标")
+            MessageDialog.warning(self, "提示", "请先选择投标")
             return
 
         # 收集所有节点数据
@@ -888,17 +843,17 @@ class BiddingDetailTab(QWidget):
             collect_items(self.detail_tree.topLevelItem(i))
 
         if not all_items_data:
-            QMessageBox.information(self, "提示", "没有数据需要重置")
+            MessageDialog.information(self, "提示", "没有数据需要重置")
             return
 
-        reply = QMessageBox.question(
+        reply = MessageDialog.question(
             self, "确认重置",
             f"确定要将所有 {len(all_items_data)} 个节点重置为级别1吗？",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            MessageDialog.Yes | MessageDialog.No,
+            MessageDialog.No
         )
 
-        if reply != QMessageBox.Yes:
+        if reply != MessageDialog.Yes:
             return
 
         self.detail_tree.clear()
@@ -948,7 +903,7 @@ class BiddingDetailTab(QWidget):
                 tree_item.setTextAlignment(col, Qt.AlignRight | Qt.AlignVCenter)
 
         self.calculate_total()
-        QMessageBox.information(self, "成功", f"已重置 {len(all_items_data)} 个节点为级别1")
+        MessageDialog.information(self, "成功", f"已重置 {len(all_items_data)} 个节点为级别1")
 
     def show_tip(self):
         """显示提示信息"""
@@ -993,12 +948,13 @@ class BiddingDetailTab(QWidget):
                 self.detail_tree.setColumnHidden(col_idx, True)
         
         # 设置列宽模式
-        # 所有列自动调整宽度
+        # 分部分项工程名称(2)、规格型号(3)、项目特征描述(4)固定宽度180
+        fixed_width_columns = [2, 3, 4]
         for col_idx in range(24):
             if col_idx in self.visible_columns or col_idx in [0, 1]:  # 包括缩进列和序号列
-                if col_idx in [3, 4]:  # 规格型号列和项目特征描述列
+                if col_idx in fixed_width_columns:  # 固定宽度列
                     header.setSectionResizeMode(col_idx, QHeaderView.Fixed)
-                    self.detail_tree.setColumnWidth(col_idx, 230)
+                    self.detail_tree.setColumnWidth(col_idx, 240)
                 else:
                     header.setSectionResizeMode(col_idx, QHeaderView.ResizeToContents)
 
@@ -1011,7 +967,7 @@ class BiddingDetailTab(QWidget):
     def on_add_detail(self):
         """添加明细"""
         if not self.current_bidding_id:
-            QMessageBox.warning(self, "提示", "请先选择投标")
+            MessageDialog.warning(self, "提示", "请先选择投标")
             return
 
         current = self.detail_tree.currentItem()
@@ -1071,17 +1027,17 @@ class BiddingDetailTab(QWidget):
         """删除明细"""
         selected_items = self.detail_tree.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "提示", "请先选择要删除的明细")
+            MessageDialog.warning(self, "提示", "请先选择要删除的明细")
             return
 
-        reply = QMessageBox.question(
+        reply = MessageDialog.question(
             self, "确认删除",
             f"确定要删除选中的 {len(selected_items)} 个明细吗？",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            MessageDialog.Yes | MessageDialog.No,
+            MessageDialog.No
         )
 
-        if reply == QMessageBox.Yes:
+        if reply == MessageDialog.Yes:
             for item in selected_items:
                 parent = item.parent()
                 if parent:
@@ -1095,12 +1051,12 @@ class BiddingDetailTab(QWidget):
     def on_save_detail(self):
         """保存明细"""
         if not self.current_bidding_id:
-            QMessageBox.warning(self, "提示", "请先选择投标")
+            MessageDialog.warning(self, "提示", "请先选择投标")
             return
 
         # TODO: 实现保存到数据库的逻辑
         # 需要保存当前汇总项ID与明细的关联关系
-        QMessageBox.information(self, "成功", "明细已保存")
+        MessageDialog.information(self, "成功", "明细已保存")
 
     def load_bidding_data(self, bidding_id: int):
         """加载投标明细数据 - 从数据库加载或显示提示"""
@@ -1277,37 +1233,7 @@ class BiddingDetailTab(QWidget):
             dialog = QDialog(self)
             dialog.setWindowTitle(f"{header_text} - 详情")
             dialog.setMinimumSize(500, 300)
-            dialog.setStyleSheet("""
-                QDialog {
-                    background-color: #2b2b2b;
-                }
-                QLabel {
-                    color: #ffffff;
-                    font-size: 14px;
-                    font-weight: bold;
-                    padding: 10px;
-                }
-                QTextEdit {
-                    background-color: #3c3c3c;
-                    color: #E6E6E6;
-                    border: 1px solid #555555;
-                    border-radius: 4px;
-                    padding: 10px;
-                    font-family: 'Microsoft YaHei';
-                    font-size: 12px;
-                }
-                QPushButton {
-                    background-color: #0d78c8;
-                    color: white;
-                    border: none;
-                    padding: 8px 20px;
-                    border-radius: 4px;
-                    font-size: 12px;
-                }
-                QPushButton:hover {
-                    background-color: #0a5a9c;
-                }
-            """)
+            dialog.setObjectName("detailDialog")
 
             layout = QVBoxLayout(dialog)
 
@@ -1332,24 +1258,7 @@ class BiddingDetailTab(QWidget):
     def show_context_menu(self, position):
         """显示右键菜单"""
         menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: #3c3c3c;
-                color: #ffffff;
-                border: 1px solid #555555;
-            }
-            QMenu::item {
-                padding: 5px 20px;
-            }
-            QMenu::item:selected {
-                background-color: #0078d4;
-            }
-            QMenu::separator {
-                height: 1px;
-                background-color: #555555;
-                margin: 5px 0px;
-            }
-        """)
+        menu.setObjectName("contextMenu")
 
         # 层级操作
         level_up_action = QAction("⬆️ 提升层级", self)
@@ -1380,7 +1289,7 @@ class BiddingDetailTab(QWidget):
         """提升节点层级"""
         selected_items = self.detail_tree.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "提示", "请先选择要提升层级的节点")
+            MessageDialog.warning(self, "提示", "请先选择要提升层级的节点")
             return
 
         for item in selected_items:
@@ -1439,7 +1348,7 @@ class BiddingDetailTab(QWidget):
         """降低节点层级"""
         selected_items = self.detail_tree.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "提示", "请先选择要降低层级的节点")
+            MessageDialog.warning(self, "提示", "请先选择要降低层级的节点")
             return
 
         for item in selected_items:

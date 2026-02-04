@@ -3,10 +3,19 @@
 显示投标相关报表
 """
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QTableWidget, QTableWidgetItem, QHeaderView,
-    QAbstractItemView, QGroupBox, QComboBox
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QAbstractItemView,
+    QGroupBox,
+    QComboBox
 )
+
+from ui.message_dialog import MessageDialog
 from PySide6.QtCore import Qt
 
 from ui.fluent_widgets import PushButton, PrimaryPushButton
@@ -32,7 +41,7 @@ class BiddingReportTab(QWidget):
         # 提示信息
         self.tip_label = QLabel("请先选择投标项目")
         self.tip_label.setAlignment(Qt.AlignCenter)
-        self.tip_label.setStyleSheet("color: #999; font-size: 16px; padding: 50px;")
+        self.tip_label.setObjectName("tipLabel")
         layout.addWidget(self.tip_label)
 
         # 报表内容区域（初始隐藏）
@@ -46,7 +55,7 @@ class BiddingReportTab(QWidget):
 
         toolbar_layout.addWidget(QLabel("当前投标:"))
         self.current_bidding_label = QLabel("")
-        self.current_bidding_label.setStyleSheet("font-weight: bold; color: #333;")
+        self.current_bidding_label.setObjectName("biddingInfoLabel")
         toolbar_layout.addWidget(self.current_bidding_label)
 
         toolbar_layout.addSpacing(20)
@@ -98,7 +107,8 @@ class BiddingReportTab(QWidget):
         summary_layout.addStretch()
         summary_layout.addWidget(QLabel("投标总价:"))
         self.total_label = QLabel("¥ 0.00")
-        self.total_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #e74c3c;")
+        self.total_label.setObjectName("totalLabel")
+        self.total_label.setProperty("large", "true")
         summary_layout.addWidget(self.total_label)
         content_layout.addLayout(summary_layout)
 
@@ -159,27 +169,15 @@ class BiddingReportTab(QWidget):
     def on_export(self):
         """导出报表"""
         if not self.current_bidding_id:
-            from PySide6.QtWidgets import QMessageBox
-            msg_box = QMessageBox(self)
-        msg_box.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        msg_box.setIcon(QMessageBox.Warning)
-        msg_box.setWindowTitle("提示")
-        msg_box.setText("请先选择投标")
-        msg_box.exec()
-        return
+            MessageDialog.warning(self, "提示", "请先选择投标")
+            return
         # TODO: 实现导出功能
         pass
 
     def on_print(self):
         """打印报表"""
         if not self.current_bidding_id:
-            from PySide6.QtWidgets import QMessageBox
-            msg_box = QMessageBox(self)
-        msg_box.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        msg_box.setIcon(QMessageBox.Warning)
-        msg_box.setWindowTitle("提示")
-        msg_box.setText("请先选择投标")
-        msg_box.exec()
-        return
+            MessageDialog.warning(self, "提示", "请先选择投标")
+            return
         # TODO: 实现打印功能
         pass

@@ -3,10 +3,19 @@
 使用 QFluentWidgets 组件，支持 QSS 主题
 """
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QFrame, QVBoxLayout, QHBoxLayout,
-    QLabel, QCheckBox, QMessageBox,
-    QGraphicsDropShadowEffect, QSpacerItem, QSizePolicy
+    QMainWindow,
+    QWidget,
+    QFrame,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QCheckBox,
+    QGraphicsDropShadowEffect,
+    QSpacerItem,
+    QSizePolicy
 )
+
+from ui.message_dialog import MessageDialog
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QColor, QFont, QPixmap
 

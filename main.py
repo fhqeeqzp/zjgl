@@ -9,9 +9,18 @@ import os
 os.environ['QT_LOGGING_RULES'] = '*.warning=false;qt.svg.warning=false;qt.png.warning=false'
 
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QStackedWidget, QFrame, QGraphicsDropShadowEffect, QDialog
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QStackedWidget,
+    QFrame,
+    QGraphicsDropShadowEffect,
+    QDialog
 )
+
+from ui.message_dialog import MessageDialog
 from PySide6.QtCore import Qt, QObject
 from PySide6.QtGui import QColor, QFont
 
@@ -164,7 +173,7 @@ class MainWindow(QMainWindow):
 
 def patch_dialogs():
     """补丁：让所有对话框默认无边框"""
-    from PySide6.QtWidgets import QDialog, QMessageBox
+    from PySide6.QtWidgets import QDialog
 
     # 保存原始的QDialog构造函数
     QDialog._original_init = QDialog.__init__
@@ -175,77 +184,6 @@ def patch_dialogs():
 
     # 替换构造函数
     QDialog.__init__ = _patched_dialog_init
-
-    # 同样处理QMessageBox实例
-    QMessageBox._original_init = QMessageBox.__init__
-
-    def _patched_msgbox_init(self, *args, **kwargs):
-        QMessageBox._original_init(self, *args, **kwargs)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
-
-    QMessageBox.__init__ = _patched_msgbox_init
-
-    # 处理QMessageBox的静态方法
-    QMessageBox._original_information = QMessageBox.information
-    QMessageBox._original_warning = QMessageBox.warning
-    QMessageBox._original_critical = QMessageBox.critical
-    QMessageBox._original_question = QMessageBox.question
-    QMessageBox._original_about = QMessageBox.about
-
-    def _patched_information(parent, title, text, buttons=QMessageBox.StandardButton.Ok, defaultButton=QMessageBox.StandardButton.NoButton):
-        msg_box = QMessageBox(parent)
-        msg_box.setWindowTitle(title)
-        msg_box.setText(text)
-        msg_box.setStandardButtons(buttons)
-        msg_box.setDefaultButton(defaultButton)
-        msg_box.setIcon(QMessageBox.Information)
-        msg_box.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
-        return msg_box.exec()
-
-    def _patched_warning(parent, title, text, buttons=QMessageBox.StandardButton.Ok, defaultButton=QMessageBox.StandardButton.NoButton):
-        msg_box = QMessageBox(parent)
-        msg_box.setWindowTitle(title)
-        msg_box.setText(text)
-        msg_box.setStandardButtons(buttons)
-        msg_box.setDefaultButton(defaultButton)
-        msg_box.setIcon(QMessageBox.Warning)
-        msg_box.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
-        return msg_box.exec()
-
-    def _patched_critical(parent, title, text, buttons=QMessageBox.StandardButton.Ok, defaultButton=QMessageBox.StandardButton.NoButton):
-        msg_box = QMessageBox(parent)
-        msg_box.setWindowTitle(title)
-        msg_box.setText(text)
-        msg_box.setStandardButtons(buttons)
-        msg_box.setDefaultButton(defaultButton)
-        msg_box.setIcon(QMessageBox.Critical)
-        msg_box.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
-        return msg_box.exec()
-
-    def _patched_question(parent, title, text, buttons=QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, defaultButton=QMessageBox.StandardButton.NoButton):
-        msg_box = QMessageBox(parent)
-        msg_box.setWindowTitle(title)
-        msg_box.setText(text)
-        msg_box.setStandardButtons(buttons)
-        msg_box.setDefaultButton(defaultButton)
-        msg_box.setIcon(QMessageBox.Question)
-        msg_box.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
-        return msg_box.exec()
-
-    def _patched_about(parent, title, text):
-        msg_box = QMessageBox(parent)
-        msg_box.setWindowTitle(title)
-        msg_box.setText(text)
-        msg_box.setStandardButtons(QMessageBox.Ok)
-        msg_box.setIcon(QMessageBox.Information)
-        msg_box.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
-        return msg_box.exec()
-
-    QMessageBox.information = staticmethod(_patched_information)
-    QMessageBox.warning = staticmethod(_patched_warning)
-    QMessageBox.critical = staticmethod(_patched_critical)
-    QMessageBox.question = staticmethod(_patched_question)
-    QMessageBox.about = staticmethod(_patched_about)
 
     # 处理QProgressDialog
     from PySide6.QtWidgets import QProgressDialog

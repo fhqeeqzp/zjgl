@@ -7,10 +7,20 @@ import shutil
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QFormLayout, QGroupBox, QMessageBox,
-    QFileDialog, QWidget, QGridLayout, QFrame, QPushButton
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QFormLayout,
+    QGroupBox,
+    QFileDialog,
+    QWidget,
+    QGridLayout,
+    QFrame,
+    QPushButton
 )
+
+from ui.message_dialog import MessageDialog
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont
 
@@ -34,6 +44,7 @@ class BiddingDialog(QDialog):
         :param parent: 父窗口
         """
         super().__init__(parent)
+        self.setObjectName("biddingDialog")
         self.bidding_manager = bidding_manager
         self.bidding_id = bidding_id
         self.theme_manager = theme_manager
@@ -370,10 +381,10 @@ class BiddingDialog(QDialog):
             # 解析文档
             self._parse_and_fill(target_path)
 
-            QMessageBox.information(self, "上传成功", f"文件已保存到:\n{target_path}")
+            MessageDialog.information(self, "上传成功", f"文件已保存到:\n{target_path}")
 
         except Exception as e:
-            QMessageBox.critical(self, "上传失败", f"文件保存失败: {e}")
+            MessageDialog.critical(self, "上传失败", f"文件保存失败: {e}")
 
     def on_reparse_document(self):
         """重新识别文档"""
@@ -383,7 +394,7 @@ class BiddingDialog(QDialog):
             file_path = self.file_combo.currentData()
 
         if not file_path or not os.path.exists(file_path):
-            QMessageBox.warning(self, "提示", "请先选择招标文件")
+            MessageDialog.warning(self, "提示", "请先选择招标文件")
             return
 
         # 清空之前提取的数据
@@ -400,7 +411,7 @@ class BiddingDialog(QDialog):
             # 填充提取的数据
             self.fill_parsed_data()
         except Exception as e:
-            QMessageBox.critical(self, "解析失败", f"文档解析出错: {e}")
+            MessageDialog.critical(self, "解析失败", f"文档解析出错: {e}")
 
     def fill_parsed_data(self):
         """填充从Word解析的数据"""
@@ -557,12 +568,12 @@ class BiddingDialog(QDialog):
         if success_fields:
             success_title = QLabel("✅ 成功提取信息：")
             success_title.setFont(QFont("Microsoft YaHei", 11, QFont.Bold))
-            success_title.setStyleSheet("color: #28a745;")
+            success_title.setObjectName("successTitleLabel")
             layout.addWidget(success_title)
 
             success_content = QLabel("、".join(success_fields))
             success_content.setFont(QFont("Microsoft YaHei", 11))
-            success_content.setStyleSheet("color: #28a745; margin-left: 20px;")
+            success_content.setObjectName("successContentLabel")
             success_content.setWordWrap(True)
             layout.addWidget(success_content)
 
@@ -570,12 +581,12 @@ class BiddingDialog(QDialog):
         if failed_fields:
             failed_title = QLabel("❌ 未成功提取信息：")
             failed_title.setFont(QFont("Microsoft YaHei", 11, QFont.Bold))
-            failed_title.setStyleSheet("color: #dc3545;")
+            failed_title.setObjectName("failedTitleLabel")
             layout.addWidget(failed_title)
 
             failed_content = QLabel("、".join(failed_fields))
             failed_content.setFont(QFont("Microsoft YaHei", 11))
-            failed_content.setStyleSheet("color: #dc3545; margin-left: 20px;")
+            failed_content.setObjectName("failedContentLabel")
             failed_content.setWordWrap(True)
             layout.addWidget(failed_content)
 
@@ -583,13 +594,7 @@ class BiddingDialog(QDialog):
         if failed_fields:
             tip_label = QLabel("⚠️ 未提取内容需要您手动填写！")
             tip_label.setFont(QFont("Microsoft YaHei", 10))
-            tip_label.setStyleSheet("""
-                color: #856404;
-                background-color: #fff3cd;
-                padding: 10px;
-                border-radius: 4px;
-                margin-top: 10px;
-            """)
+            tip_label.setObjectName("warningTipLabel")
             tip_label.setWordWrap(True)
             layout.addWidget(tip_label)
 
@@ -633,7 +638,7 @@ class BiddingDialog(QDialog):
         if not self.bidding_id:
             project = self.project_combo.currentData()
             if not project:
-                QMessageBox.warning(self, "验证失败", "请选择项目")
+                MessageDialog.warning(self, "验证失败", "请选择项目")
                 self.project_combo.setFocus()
                 return
             project_id = project['id']
@@ -670,7 +675,7 @@ class BiddingDialog(QDialog):
         }
 
         if not bidding_data['bidding_code']:
-            QMessageBox.warning(self, "验证失败", "投标编码不能为空")
+            MessageDialog.warning(self, "验证失败", "投标编码不能为空")
             return
 
         if self.bidding_id:
@@ -679,10 +684,10 @@ class BiddingDialog(QDialog):
             success, msg = self.bidding_manager.create_bidding(bidding_data)
 
         if success:
-            QMessageBox.information(self, "成功", "保存成功")
+            MessageDialog.information(self, "成功", "保存成功")
             self.accept()
         else:
-            QMessageBox.critical(self, "失败", f"保存失败: {msg}")
+            MessageDialog.critical(self, "失败", f"保存失败: {msg}")
 
     def on_theme_changed(self, theme: dict):
         """主题变化回调 - QSS 已全局加载"""

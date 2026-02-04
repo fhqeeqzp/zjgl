@@ -68,6 +68,9 @@ QComboBox QAbstractItemView {
     border: 1px solid #CCCCCC;
     selection-background-color: rgba(0, 120, 212, 0.2);
 }
+QComboBox:hover {
+    border-color: #0078D4;
+}
 
 QCheckBox::indicator {
     border: 2px solid #666666;
@@ -103,6 +106,37 @@ QHeaderView::section {
     background-color: #F3F3F3;
     color: #666666;
     border: 1px solid #DDDDDD;
+}
+
+/* QTreeWidget - 树形控件样式 */
+QTreeWidget {
+    background-color: #FFFFFF;
+    alternate-background-color: #F9F9F9;
+    color: #1A1A1A;
+    border: 1px solid #CCCCCC;
+    border-radius: 8px;
+    padding: 8px;
+    outline: none;
+}
+
+QTreeWidget::item {
+    height: 32px;
+    padding-left: 4px;
+    border-radius: 4px;
+    margin: 1px 2px;
+}
+
+QTreeWidget::item:hover {
+    background-color: #E8F4FD;
+}
+
+QTreeWidget::item:selected {
+    background-color: rgba(0, 120, 212, 0.2);
+    color: #0078D4;
+}
+
+QTreeWidget::item:selected:active {
+    background-color: rgba(0, 120, 212, 0.3);
 }
 
 QProgressBar {
@@ -429,4 +463,429 @@ QCalendarWidget QTableView {
     border: none;
     border-bottom-left-radius: 8px;
     border-bottom-right-radius: 8px;
+}
+
+/* =============== 导入对话框专用样式 =============== */
+
+/* 导入进度对话框 */
+QDialog#importProgressDialog {
+    background-color: #FFFFFF;
+}
+
+QDialog#importProgressDialog QLabel {
+    color: #1A1A1A;
+    background-color: transparent;
+}
+
+QDialog#importProgressDialog QLabel#statusLabel {
+    font-size: 14px;
+    font-weight: bold;
+    color: #0078D4;
+}
+
+QDialog#importProgressDialog QLabel#statusLabel[error="true"] {
+    color: #dc3545;
+}
+
+QDialog#importProgressDialog QLabel#statusLabel[success="true"] {
+    color: #28a745;
+}
+
+QDialog#importProgressDialog QLabel#currentRowLabel {
+    color: #666666;
+    font-size: 12px;
+}
+
+QDialog#importProgressDialog QLabel#statsLabel {
+    color: #666666;
+    font-size: 12px;
+}
+
+QDialog#importProgressDialog QLabel#detailLabel {
+    color: #1A1A1A;
+    font-size: 12px;
+}
+
+QDialog#importProgressDialog QProgressBar {
+    border: 1px solid #CCCCCC;
+    border-radius: 4px;
+    background-color: #F3F3F3;
+    height: 20px;
+    text-align: center;
+}
+
+QDialog#importProgressDialog QProgressBar::chunk {
+    background-color: #0078D4;
+    border-radius: 3px;
+}
+
+QDialog#importProgressDialog QTextEdit {
+    background-color: #F9F9F9;
+    color: #1A1A1A;
+    border: 1px solid #CCCCCC;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Microsoft YaHei', monospace;
+    font-size: 12px;
+    padding: 8px;
+}
+
+/* Excel导入对话框 */
+QDialog#excelImportDialog {
+    background-color: #FFFFFF;
+}
+
+QDialog#excelImportDialog QLabel {
+    color: #1A1A1A;
+    background-color: transparent;
+}
+
+QDialog#excelImportDialog QComboBox {
+    background-color: #FFFFFF;
+    color: #1A1A1A;
+    border: 1px solid #CCCCCC;
+    border-radius: 4px;
+    padding: 5px;
+    min-height: 25px;
+}
+
+QDialog#excelImportDialog QComboBox:hover {
+    border-color: #0078D4;
+}
+
+QDialog#excelImportDialog QComboBox::drop-down {
+    border: none;
+    width: 25px;
+}
+
+QDialog#excelImportDialog QComboBox QAbstractItemView {
+    background-color: #FFFFFF;
+    color: #1A1A1A;
+    border: 1px solid #CCCCCC;
+    selection-background-color: #0078D4;
+}
+
+QDialog#excelImportDialog QGroupBox {
+    color: #1A1A1A;
+    border: 1px solid #CCCCCC;
+    border-radius: 5px;
+    margin-top: 10px;
+    font-weight: bold;
+    background-color: transparent;
+}
+
+QDialog#excelImportDialog QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px;
+    background-color: #FFFFFF;
+}
+
+QDialog#excelImportDialog QTableWidget {
+    background-color: #FFFFFF;
+    color: #1A1A1A;
+    border: 1px solid #CCCCCC;
+    gridline-color: #DDDDDD;
+}
+
+QDialog#excelImportDialog QTableWidget::item {
+    background-color: #FFFFFF;
+    color: #1A1A1A;
+    padding: 5px;
+}
+
+QDialog#excelImportDialog QTableWidget::item:selected {
+    background-color: #0078D4;
+    color: #FFFFFF;
+}
+
+QDialog#excelImportDialog QHeaderView::section {
+    background-color: #F3F3F3;
+    color: #1A1A1A;
+    padding: 5px;
+    border: 1px solid #DDDDDD;
+    font-weight: bold;
+}
+
+QDialog#excelImportDialog QScrollArea {
+    border: none;
+    background-color: transparent;
+}
+
+QDialog#excelImportDialog QFrame {
+    background-color: #F9F9F9;
+    border-radius: 5px;
+}
+
+QDialog#excelImportDialog QFrame#infoFrame {
+    background-color: #F9F9F9;
+    border-radius: 5px;
+    padding: 5px;
+}
+
+QDialog#excelImportDialog QFrame#mappingContainer {
+    background-color: #F9F9F9;
+    border-radius: 5px;
+}
+
+QDialog#excelImportDialog QFrame#btnFrame {
+    background-color: transparent;
+}
+
+QDialog#excelImportDialog QProgressBar {
+    border: 1px solid #CCCCCC;
+    border-radius: 3px;
+    background-color: #F3F3F3;
+    height: 8px;
+}
+
+QDialog#excelImportDialog QProgressBar::chunk {
+    background-color: #0078D4;
+    border-radius: 2px;
+}
+
+/* 列映射组件样式 */
+QWidget#columnMappingWidget {
+    background-color: transparent;
+}
+
+QWidget#columnMappingWidget QLabel {
+    color: #1A1A1A;
+    background-color: transparent;
+    font-size: 12px;
+}
+
+QWidget#columnMappingWidget QLabel#previewLabel {
+    color: #666666;
+    font-size: 10px;
+}
+
+/* 投标汇总表标签页 */
+QTreeWidget#summaryTree {
+    background-color: #FFFFFF;
+    alternate-background-color: #F9F9F9;
+    color: #1A1A1A;
+    border: 1px solid #CCCCCC;
+    border-radius: 8px;
+    padding: 8px;
+    outline: none;
+}
+
+QTreeWidget#summaryTree::item {
+    height: 32px;
+    padding-left: 4px;
+    border-radius: 4px;
+    margin: 1px 2px;
+}
+
+QTreeWidget#summaryTree::item:hover {
+    background-color: #E8F4FD;
+}
+
+QTreeWidget#summaryTree::item:selected {
+    background-color: rgba(0, 120, 212, 0.2);
+    color: #0078D4;
+}
+
+QTreeWidget#summaryTree::item:selected:active {
+    background-color: rgba(0, 120, 212, 0.3);
+}
+
+/* 投标明细表标签页 */
+QTreeWidget#detailTree {
+    background-color: #FFFFFF;
+    alternate-background-color: #F9F9F9;
+    color: #1A1A1A;
+    border: 1px solid #CCCCCC;
+    border-radius: 8px;
+    padding: 8px;
+    outline: none;
+}
+
+QTreeWidget#detailTree::item {
+    height: 32px;
+    padding-left: 4px;
+    border-radius: 4px;
+    margin: 1px 2px;
+}
+
+QTreeWidget#detailTree::item:hover {
+    background-color: #E8F4FD;
+}
+
+QTreeWidget#detailTree::item:selected {
+    background-color: rgba(0, 120, 212, 0.2);
+    color: #0078D4;
+}
+
+QTreeWidget#detailTree::item:selected:active {
+    background-color: rgba(0, 120, 212, 0.3);
+}
+
+/* 列选择对话框 */
+QDialog#columnSelectDialog {
+    background-color: #FFFFFF;
+}
+
+QDialog#columnSelectDialog QLabel {
+    color: #1A1A1A;
+    background-color: transparent;
+    font-size: 13px;
+}
+
+QDialog#columnSelectDialog QLabel#titleLabel {
+    font-weight: bold;
+    font-size: 14px;
+    color: #0078D4;
+}
+
+QDialog#columnSelectDialog QLabel#hintLabel {
+    color: #666666;
+    font-size: 11px;
+}
+
+QDialog#columnSelectDialog QLabel#indentHintLabel {
+    color: #0078D4;
+    font-size: 11px;
+}
+
+QDialog#columnSelectDialog QCheckBox {
+    color: #1A1A1A;
+    background-color: transparent;
+    spacing: 8px;
+}
+
+QDialog#columnSelectDialog QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+}
+
+QDialog#columnSelectDialog QCheckBox::indicator:unchecked {
+    border: 2px solid #CCCCCC;
+    background-color: #FFFFFF;
+    border-radius: 3px;
+}
+
+QDialog#columnSelectDialog QCheckBox::indicator:checked {
+    border: 2px solid #0078D4;
+    background-color: #0078D4;
+    border-radius: 3px;
+}
+
+QDialog#columnSelectDialog QScrollArea {
+    border: none;
+    background-color: transparent;
+}
+
+QDialog#columnSelectDialog QFrame {
+    background-color: #F9F9F9;
+    border-radius: 8px;
+}
+
+/* 菜单样式 */
+QMenu#contextMenu {
+    background-color: #FFFFFF;
+    border: 1px solid #CCCCCC;
+    color: #1A1A1A;
+}
+
+QMenu#contextMenu::item {
+    padding: 6px 20px;
+}
+
+QMenu#contextMenu::item:selected {
+    background-color: rgba(0, 120, 212, 0.1);
+}
+
+/* 提示标签样式 */
+QLabel#tipLabel {
+    color: #999999;
+    font-size: 16px;
+    padding: 50px;
+}
+
+/* 统计标签样式 */
+QLabel#totalLabel {
+    font-size: 16px;
+    font-weight: bold;
+    color: #dc3545;
+}
+
+QLabel#amountLabel {
+    font-weight: bold;
+    color: #dc3545;
+}
+
+QLabel#quoteLabel {
+    font-weight: bold;
+    color: #dc3545;
+    font-size: 14px;
+}
+
+/* 投标信息标签 */
+QLabel#biddingCodeLabel {
+    font-weight: bold;
+    color: #0078D4;
+}
+
+QLabel#biddingNameLabel {
+    font-weight: bold;
+    color: #0078D4;
+}
+
+QLabel#projectItemLabel {
+    font-weight: bold;
+    color: #CE9178;
+    font-size: 14px;
+}
+
+/* 成功/失败提示 */
+QLabel#successTitle {
+    color: #28a745;
+}
+
+QLabel#successContent {
+    color: #28a745;
+    margin-left: 20px;
+}
+
+QLabel#failedTitle {
+    color: #dc3545;
+}
+
+QLabel#failedContent {
+    color: #dc3545;
+    margin-left: 20px;
+}
+
+QLabel#tipContent {
+    color: #666666;
+    font-size: 12px;
+}
+
+/* 进度对话框 */
+QProgressDialog {
+    background-color: #FFFFFF;
+}
+
+QProgressDialog QLabel {
+    color: #1A1A1A;
+}
+
+QProgressDialog QProgressBar {
+    border: 1px solid #CCCCCC;
+    border-radius: 4px;
+    background-color: #F3F3F3;
+}
+
+QProgressDialog QProgressBar::chunk {
+    background-color: #0078D4;
+}
+
+/* 对话框样式 */
+QDialog#customDialog {
+    background-color: #FFFFFF;
+}
+
+QDialog#customDialog QLabel {
+    color: #1A1A1A;
 }

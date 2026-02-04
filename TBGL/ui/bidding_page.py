@@ -4,11 +4,23 @@
 包含四个页签：投标信息、投标汇总表、投标明细、报表管理
 """
 from PySide6.QtWidgets import (
-    QFrame, QVBoxLayout, QHBoxLayout, QLabel,
-    QWidget, QTableWidget, QTableWidgetItem,
-    QHeaderView, QAbstractItemView, QMessageBox, QMenu,
-    QDialog, QPushButton, QTabWidget, QComboBox
+    QFrame,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QAbstractItemView,
+    QMenu,
+    QDialog,
+    QPushButton,
+    QTabWidget,
+    QComboBox
 )
+
+from ui.message_dialog import MessageDialog
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QAction
 
@@ -334,7 +346,7 @@ class BiddingPage(QFrame):
         """编辑投标事件"""
         selected_rows = self.table.selectedIndexes()
         if not selected_rows:
-            QMessageBox.warning(self, "提示", "请先选择要编辑的投标")
+            MessageDialog.warning(self, "提示", "请先选择要编辑的投标")
             return
 
         row = selected_rows[0].row()
@@ -358,7 +370,7 @@ class BiddingPage(QFrame):
         """删除投标事件"""
         selected_rows = self.table.selectedIndexes()
         if not selected_rows:
-            QMessageBox.warning(self, "提示", "请先选择要删除的投标")
+            MessageDialog.warning(self, "提示", "请先选择要删除的投标")
             return
 
         row = selected_rows[0].row()
@@ -368,20 +380,20 @@ class BiddingPage(QFrame):
         bidding_id = self.bidding_ids[row]
         bidding = self.bidding_manager.get_bidding(bidding_id)
         if not bidding:
-            QMessageBox.warning(self, "提示", "投标不存在")
+            MessageDialog.warning(self, "提示", "投标不存在")
             return
 
         bidding_code = bidding.bidding_code
 
         # 确认删除
-        reply = QMessageBox.question(
+        reply = MessageDialog.question(
             self, "确认删除",
             f"确定要删除投标 [{bidding_code}] 吗？\n此操作不可恢复！",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            MessageDialog.Yes | MessageDialog.No,
+            MessageDialog.No
         )
 
-        if reply == QMessageBox.Yes:
+        if reply == MessageDialog.Yes:
             success, msg = self.bidding_manager.delete_bidding(bidding_id)
             if success:
                 # 如果删除的是当前选中的投标，清空选择
@@ -389,11 +401,11 @@ class BiddingPage(QFrame):
                     self.current_bidding_id = None
                     self.current_bidding_code = None
                     self._update_tab_status()
-                QMessageBox.information(self, "成功", "投标已删除")
+                MessageDialog.information(self, "成功", "投标已删除")
                 self.refresh_table()
                 self.update_statistics()
             else:
-                QMessageBox.critical(self, "失败", f"删除失败: {msg}")
+                MessageDialog.critical(self, "失败", f"删除失败: {msg}")
 
     def on_refresh(self):
         """刷新数据事件"""

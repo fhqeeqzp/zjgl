@@ -1,0 +1,93 @@
+/* 自定义消息对话框 - 深色主题样式 */
+
+QDialog#messageDialog {
+    background: transparent;
+}
+
+QDialog#messageDialog QWidget#contentWidget {
+    background-color: #2D2D2D;
+    border-radius: 8px;
+    border: 1px solid #3C3C3C;
+}
+
+/* 标题栏 */
+QDialog#messageDialog QWidget#titleBar {
+    background-color: #323232;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom: 1px solid #3C3C3C;
+}
+
+QDialog#messageDialog QLabel#titleLabel {
+    color: #E6E6E6;
+    font-size: 14px;
+    font-weight: bold;
+    background: transparent;
+}
+
+QDialog#messageDialog QPushButton#closeButton {
+    background-color: transparent;
+    color: #999999;
+    border: none;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+QDialog#messageDialog QPushButton#closeButton:hover {
+    background-color: #E81123;
+    color: #FFFFFF;
+    border-radius: 4px;
+}
+
+/* 内容区域 */
+QDialog#messageDialog QWidget#bodyWidget {
+    background-color: transparent;
+}
+
+QDialog#messageDialog QLabel#textLabel {
+    color: #E6E6E6;
+    font-size: 14px;
+    line-height: 1.5;
+    background: transparent;
+    border: none;
+}
+
+/* 按钮区域 */
+QDialog#messageDialog QWidget#buttonWidget {
+    background-color: transparent;
+}
+
+QDialog#messageDialog QPushButton#okButton,
+QDialog#messageDialog QPushButton#yesButton {
+    background-color: #0078D4;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 24px;
+    font-size: 13px;
+    min-width: 80px;
+    min-height: 32px;
+}
+
+QDialog#messageDialog QPushButton#okButton:hover,
+QDialog#messageDialog QPushButton#yesButton:hover {
+    background-color: #106EBE;
+}
+
+QDialog#messageDialog QPushButton#noButton,
+QDialog#messageDialog QPushButton#cancelButton {
+    background-color: #3C3C3C;
+    color: #E6E6E6;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    padding: 8px 24px;
+    font-size: 13px;
+    min-width: 80px;
+    min-height: 32px;
+}
+
+QDialog#messageDialog QPushButton#noButton:hover,
+QDialog#messageDialog QPushButton#cancelButton:hover {
+    background-color: #4C4C4C;
+    border-color: #666666;
+}

@@ -16,13 +16,29 @@ except ImportError:
     OPENPYXL_AVAILABLE = False
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QComboBox, QTableWidget, QTableWidgetItem,
-    QHeaderView, QPushButton, QGroupBox, QFrame,
-    QMessageBox, QSplitter, QWidget, QProgressBar,
-    QTextEdit, QApplication, QScrollArea, QGridLayout
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QComboBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QPushButton,
+    QFrame,
+    QSplitter,
+    QWidget,
+    QProgressBar,
+    QTextEdit,
+    QApplication,
+    QScrollArea,
+    QGridLayout,
+    QFormLayout
 )
+
+from ui.message_dialog import MessageDialog
 from PySide6.QtCore import Qt, Signal, QThread
+from PySide6.QtGui import QFont
 
 from ui.fluent_widgets import PushButton, PrimaryPushButton
 from .excel_import_dialog import ColumnMappingWidget, ExcelLoadWorker
@@ -34,37 +50,14 @@ class ImportProgressDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("正在导入数据...")
-        self.setMinimumSize(600, 400)
+        self.setMinimumSize(800, 600)
         self.setMaximumSize(800, 600)
         self.setModal(True)
         
-        self.setup_ui()
+        # 设置对象名以便QSS样式应用
+        self.setObjectName("importProgressDialog")
         
-        # 设置样式
-        self.setStyleSheet("""
-            QDialog { background-color: #2b2b2b; color: #ffffff; }
-            QLabel { color: #ffffff; background-color: transparent; }
-            QProgressBar { 
-                border: 1px solid #555555; 
-                border-radius: 4px; 
-                background-color: #3c3c3c; 
-                height: 20px;
-                text-align: center;
-            }
-            QProgressBar::chunk { 
-                background-color: #4EC9FF; 
-                border-radius: 3px;
-            }
-            QTextEdit { 
-                background-color: #1e1e1e; 
-                color: #d4d4d4; 
-                border: 1px solid #444444;
-                border-radius: 4px;
-                font-family: 'Consolas', 'Microsoft YaHei', monospace;
-                font-size: 12px;
-                padding: 8px;
-            }
-        """)
+        self.setup_ui()
     
     def setup_ui(self):
         """设置UI"""
@@ -74,7 +67,7 @@ class ImportProgressDialog(QDialog):
         
         # 状态标签
         self.status_label = QLabel("正在准备导入...")
-        self.status_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #4EC9FF;")
+        self.status_label.setObjectName("statusLabel")
         layout.addWidget(self.status_label)
         
         # 进度条
@@ -86,12 +79,12 @@ class ImportProgressDialog(QDialog):
         
         # 当前行信息
         self.current_row_label = QLabel("")
-        self.current_row_label.setStyleSheet("color: #aaaaaa; font-size: 12px;")
+        self.current_row_label.setObjectName("currentRowLabel")
         layout.addWidget(self.current_row_label)
         
         # 明细显示区域
         detail_label = QLabel("📋 导入明细（最近20行）：")
-        detail_label.setStyleSheet("color: #ffffff; font-size: 12px;")
+        detail_label.setObjectName("detailLabel")
         layout.addWidget(detail_label)
         
         self.detail_text = QTextEdit()
@@ -100,7 +93,7 @@ class ImportProgressDialog(QDialog):
         
         # 统计信息
         self.stats_label = QLabel("已导入: 0 行")
-        self.stats_label.setStyleSheet("color: #aaaaaa; font-size: 12px;")
+        self.stats_label.setObjectName("statsLabel")
         layout.addWidget(self.stats_label)
         
         # 取消按钮
@@ -156,21 +149,27 @@ class ImportProgressDialog(QDialog):
         """取消导入"""
         self.is_cancelled = True
         self.status_label.setText("正在取消...")
-        self.status_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #ff6b6b;")
-    
+        self.status_label.setProperty("status", "error")
+        self.status_label.style().unpolish(self.status_label)
+        self.status_label.style().polish(self.status_label)
+
     def set_completed(self, success_count: int, error_count: int):
         """设置完成状态"""
         self.progress_bar.setValue(self.progress_bar.maximum())
         self.status_label.setText("✓ 导入完成")
-        self.status_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #4ade80;")
+        self.status_label.setProperty("status", "success")
+        self.status_label.style().unpolish(self.status_label)
+        self.status_label.style().polish(self.status_label)
         self.stats_label.setText(f"成功: {success_count} 行 | 错误: {error_count} 行")
         self.cancel_btn.setText("关闭")
         self.cancel_btn.setEnabled(True)
-    
+
     def set_error(self, error_msg: str):
         """设置错误状态"""
         self.status_label.setText(f"✗ 导入失败")
-        self.status_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #ff6b6b;")
+        self.status_label.setProperty("status", "error")
+        self.status_label.style().unpolish(self.status_label)
+        self.status_label.style().polish(self.status_label)
         self.detail_text.append(f"\n错误: {error_msg}")
         self.cancel_btn.setText("关闭")
 
@@ -242,90 +241,113 @@ class DetailImportDialog(QDialog):
         self.header_row_count = 1  # 表头行数（支持多行表头）
         self.load_worker = None
         self.current_sheet_name = None
+        self.drag_pos = None
 
-        self.setWindowTitle("投标明细导入 - 列映射配置")
+        # 设置无边框窗口
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+
         self.setMinimumSize(1000, 800)
 
         self.setup_ui()
         self.load_excel_async()
-    
+
     def setup_ui(self):
-        """设置UI"""
-        layout = QVBoxLayout(self)
+        """设置UI - 自定义标题栏"""
+        # 主布局
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 创建内容容器
+        self.content_frame = QFrame()
+        self.content_frame.setObjectName("contentFrame")
+        layout = QVBoxLayout(self.content_frame)
         layout.setSpacing(15)
-        layout.setContentsMargins(20, 20, 20, 20)
-        
-        # 设置对话框样式
-        self.setStyleSheet("""
-            QDialog { background-color: #2b2b2b; color: #ffffff; }
-            QLabel { color: #ffffff; background-color: transparent; }
-            QComboBox { background-color: #3c3c3c; color: #ffffff; border: 1px solid #555555; border-radius: 4px; padding: 5px; min-height: 25px; }
-            QComboBox:hover { border-color: #0078d4; }
-            QComboBox::drop-down { border: none; width: 25px; }
-            QComboBox QAbstractItemView { background-color: #3c3c3c; color: #ffffff; border: 1px solid #555555; selection-background-color: #0078d4; }
-            QGroupBox { color: #ffffff; border: 1px solid #555555; border-radius: 5px; margin-top: 10px; font-weight: bold; background-color: transparent; }
-            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; background-color: #2b2b2b; }
-            QTableWidget { background-color: #3c3c3c; color: #ffffff; border: 1px solid #555555; gridline-color: #555555; }
-            QTableWidget::item { background-color: #3c3c3c; color: #ffffff; padding: 5px; }
-            QTableWidget::item:selected { background-color: #0078d4; color: #ffffff; }
-            QHeaderView::section { background-color: #404040; color: #ffffff; padding: 5px; border: 1px solid #555555; font-weight: bold; }
-            QScrollArea { border: none; background-color: transparent; }
-            QFrame { background-color: #3c3c3c; border-radius: 5px; }
-            QProgressBar { border: 1px solid #555555; border-radius: 3px; background-color: #3c3c3c; height: 8px; }
-            QProgressBar::chunk { background-color: #0078d4; border-radius: 2px; }
-        """)
-        
+        layout.setContentsMargins(0, 0, 0, 20)
+
+        # ========== 自定义标题栏 ==========
+        title_bar = QFrame()
+        title_bar.setObjectName("titleBarFrame")
+        title_bar.setFixedHeight(50)
+        title_bar_layout = QHBoxLayout(title_bar)
+        title_bar_layout.setContentsMargins(20, 0, 20, 0)
+        title_bar_layout.setSpacing(10)
+
+        # 标题
+        title = QLabel("投标明细导入 - 列映射配置")
+        title.setFont(QFont("Microsoft YaHei", 14, QFont.Bold))
+        title.setObjectName("titleLabel")
+        title_bar_layout.addWidget(title)
+
+        title_bar_layout.addStretch()
+
+        # 关闭按钮
+        close_btn = QPushButton("×")
+        close_btn.setObjectName("closeButton")
+        close_btn.setProperty("class", "titlebar-button")
+        close_btn.setFixedSize(46, 32)
+        close_btn.setFont(QFont("Microsoft YaHei", 14))
+        close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.clicked.connect(self.reject)
+        title_bar_layout.addWidget(close_btn)
+
+        layout.addWidget(title_bar)
+
+        # ========== 表单内容区域 ==========
+        form_widget = QWidget()
+        form_layout = QFormLayout(form_widget)
+        form_layout.setSpacing(10)
+        form_layout.setLabelAlignment(Qt.AlignRight)
+        form_layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        form_layout.setContentsMargins(30, 10, 30, 0)
+
         # 文件信息
         info_frame = QFrame()
-        info_frame.setStyleSheet("background-color: #3c3c3c; border-radius: 5px; padding: 5px;")
+        info_frame.setObjectName("infoFrame")
         info_layout = QHBoxLayout(info_frame)
+        info_layout.setContentsMargins(0, 0, 0, 0)
         info_label = QLabel(f"📄 文件: {os.path.basename(self.excel_path)}")
-        info_label.setStyleSheet("color: #ffffff; background-color: transparent;")
         info_layout.addWidget(info_label)
         info_layout.addStretch()
-        layout.addWidget(info_frame)
-        
-        # 工作簿和表头行选择（合并到一行）
-        selection_layout = QHBoxLayout()
-        
+        form_layout.addRow("文件:", info_frame)
+
         # 工作簿选择
-        sheet_label = QLabel("📑 工作簿:")
-        sheet_label.setStyleSheet("color: #ffffff; background-color: transparent;")
-        selection_layout.addWidget(sheet_label)
+        sheet_layout = QHBoxLayout()
         self.sheet_combo = QComboBox()
         self.sheet_combo.setMinimumWidth(180)
         self.sheet_combo.currentIndexChanged.connect(self.on_sheet_changed)
-        selection_layout.addWidget(self.sheet_combo)
-        
+        sheet_layout.addWidget(self.sheet_combo)
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setMaximumWidth(100)
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setTextVisible(False)
         self.progress_bar.hide()
-        selection_layout.addWidget(self.progress_bar)
-        
+        sheet_layout.addWidget(self.progress_bar)
+
         self.status_label = QLabel("")
-        self.status_label.setStyleSheet("color: #aaaaaa; font-size: 12px; background-color: transparent;")
-        selection_layout.addWidget(self.status_label)
-        
-        selection_layout.addSpacing(30)
-        
+        sheet_layout.addWidget(self.status_label)
+
+        sheet_layout.addStretch()
+        form_layout.addRow("工作簿:", sheet_layout)
+
         # 表头行选择
-        header_row_label = QLabel("📋 表头行:")
-        header_row_label.setStyleSheet("color: #ffffff; background-color: transparent;")
-        selection_layout.addWidget(header_row_label)
+        header_row_layout = QHBoxLayout()
         self.header_row_combo = QComboBox()
         self.header_row_combo.setMinimumWidth(250)
         self.header_row_combo.setToolTip("选择哪一行作为表头")
         self.header_row_combo.currentIndexChanged.connect(self.on_header_row_changed)
-        selection_layout.addWidget(self.header_row_combo)
+        header_row_layout.addWidget(self.header_row_combo)
 
         header_row_hint = QLabel("💡 提示: 请选择包含列标题的行")
-        header_row_hint.setStyleSheet("color: #aaaaaa; font-size: 12px; background-color: transparent;")
-        selection_layout.addWidget(header_row_hint)
-        
-        selection_layout.addStretch()
-        layout.addLayout(selection_layout)
+        header_row_hint.setObjectName("hintLabel")
+        header_row_layout.addWidget(header_row_hint)
+
+        header_row_layout.addStretch()
+        form_layout.addRow("表头行:", header_row_layout)
+
+        layout.addWidget(form_widget)
 
         # 分割器
         splitter = QSplitter(Qt.Vertical)
@@ -335,18 +357,15 @@ class DetailImportDialog(QDialog):
         mapping_layout = QVBoxLayout(mapping_widget)
         mapping_layout.setContentsMargins(0, 0, 0, 0)
 
-        mapping_group = QGroupBox("列映射配置")
-        mapping_group_layout = QVBoxLayout(mapping_group)
-        
         # 创建滚动区域
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll_area.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
-        
+        scroll_area.setObjectName("mappingScrollArea")
+
         # 列映射容器（两列布局）
         mapping_container = QWidget()
-        mapping_container.setStyleSheet("background-color: #3c3c3c; border-radius: 5px;")
+        mapping_container.setObjectName("mappingContainer")
         mapping_inner_layout = QGridLayout(mapping_container)
         mapping_inner_layout.setContentsMargins(15, 15, 15, 15)
         mapping_inner_layout.setSpacing(10)
@@ -363,22 +382,22 @@ class DetailImportDialog(QDialog):
             widget.mapping_changed.connect(self.on_mapping_changed)
             self.mapping_widgets[field_key] = widget
             mapping_inner_layout.addWidget(widget, row, col)
-            
+
             col += 1
             if col >= 2:  # 每行2个
                 col = 0
                 row += 1
 
         scroll_area.setWidget(mapping_container)
-        mapping_group_layout.addWidget(scroll_area)
-        
+        mapping_layout.addWidget(scroll_area)
+
         # 按钮区域（固定居中）
         btn_frame = QFrame()
-        btn_frame.setStyleSheet("background-color: transparent;")
+        btn_frame.setObjectName("buttonFrame")
         btn_layout = QHBoxLayout(btn_frame)
         btn_layout.setAlignment(Qt.AlignCenter)
         btn_layout.setSpacing(20)
-        
+
         auto_btn = PushButton("🔍 智能识别列")
         auto_btn.setToolTip("根据表头名称自动匹配列")
         auto_btn.setFixedSize(120, 35)
@@ -389,51 +408,54 @@ class DetailImportDialog(QDialog):
         clear_btn.setFixedSize(120, 35)
         clear_btn.clicked.connect(self.clear_mappings)
         btn_layout.addWidget(clear_btn)
-        
-        mapping_group_layout.addWidget(btn_frame)
-        mapping_layout.addWidget(mapping_group)
+
+        mapping_layout.addWidget(btn_frame)
         splitter.addWidget(mapping_widget)
-        
+
         # 下半部分：原始数据预览（增加高度）
         preview_widget = QWidget()
         preview_layout = QVBoxLayout(preview_widget)
         preview_layout.setContentsMargins(0, 0, 0, 0)
-        
-        preview_group = QGroupBox("Excel原始数据预览（前10行）")
-        preview_group_layout = QVBoxLayout(preview_group)
-        
+
         self.preview_table = QTableWidget()
         self.preview_table.setMinimumHeight(250)
-        
-        preview_group_layout.addWidget(self.preview_table)
-        preview_layout.addWidget(preview_group)
+
+        preview_layout.addWidget(self.preview_table)
         splitter.addWidget(preview_widget)
         
         splitter.setSizes([350, 400])
         layout.addWidget(splitter)
-        
-        # 按钮区域
+
+        layout.addStretch()
+
+        # 按钮区域（居中）
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
-        
+
         cancel_btn = PushButton("取消")
+        cancel_btn.setObjectName("secondaryButton")
         cancel_btn.setFixedSize(100, 35)
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
-        
-        btn_layout.addSpacing(15)
-        
+
+        btn_layout.addSpacing(20)
+
         self.import_btn = PrimaryPushButton("确认导入")
         self.import_btn.setFixedSize(100, 35)
         self.import_btn.clicked.connect(self.on_import)
         btn_layout.addWidget(self.import_btn)
-        
+
+        btn_layout.addStretch()
+
         layout.addLayout(btn_layout)
+
+        # 添加内容框架到主布局
+        main_layout.addWidget(self.content_frame)
     
     def load_excel_async(self):
         """异步加载Excel文件"""
         if not OPENPYXL_AVAILABLE:
-            QMessageBox.warning(self, "提示", "请先安装openpyxl: pip install openpyxl")
+            MessageDialog.warning(self, "提示", "请先安装openpyxl: pip install openpyxl")
             self.reject()
             return
         
@@ -569,7 +591,7 @@ class DetailImportDialog(QDialog):
         self.progress_bar.hide()
         self.status_label.setText("加载失败")
         self.import_btn.setEnabled(True)
-        QMessageBox.critical(self, "错误", f"无法加载Excel文件:\n{error_msg}")
+        MessageDialog.critical(self, "错误", f"无法加载Excel文件:\n{error_msg}")
         
         if self.load_worker:
             self.load_worker.stop()
@@ -834,7 +856,7 @@ class DetailImportDialog(QDialog):
         # 检查必填字段
         for field_key, field_name, is_required, _ in self.FIELD_DEFINITIONS:
             if is_required and field_key not in mapping:
-                QMessageBox.warning(self, "提示", f"必须配置 {field_name} 列")
+                MessageDialog.warning(self, "提示", f"必须配置 {field_name} 列")
                 return []
 
         try:
@@ -957,7 +979,7 @@ class DetailImportDialog(QDialog):
 
         except Exception as e:
             progress_dialog.set_error(str(e))
-            QMessageBox.critical(self, "错误", f"导入数据失败:\n{e}")
+            MessageDialog.critical(self, "错误", f"导入数据失败:\n{e}")
             return []
     
     def on_import(self):
@@ -976,12 +998,12 @@ class DetailImportDialog(QDialog):
         if data and len(data) > 0:
             self._imported_data = data
             # 导入完成，显示成功信息
-            QMessageBox.information(self, "导入成功", f"成功导入 {len(data)} 条数据")
+            MessageDialog.information(self, "导入成功", f"成功导入 {len(data)} 条数据")
             progress_dialog.close()
             self.accept()
         elif data is not None and len(data) == 0:
             # 没有数据导入
-            QMessageBox.warning(self, "提示", "没有导入任何数据，请检查Excel文件")
+            MessageDialog.warning(self, "提示", "没有导入任何数据，请检查Excel文件")
             progress_dialog.close()
         else:
             # 导入失败
@@ -997,3 +1019,16 @@ class DetailImportDialog(QDialog):
             self.load_worker.stop()
             self.load_worker = None
         event.accept()
+
+    # ========== 鼠标拖动支持 ==========
+    def mousePressEvent(self, event):
+        """鼠标按下 - 开始拖动"""
+        if event.button() == Qt.LeftButton:
+            self.drag_pos = event.globalPos() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        """鼠标移动 - 拖动窗口"""
+        if event.buttons() == Qt.LeftButton and self.drag_pos is not None:
+            self.move(event.globalPos() - self.drag_pos)
+            event.accept()

@@ -7,11 +7,24 @@ import shutil
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QFormLayout, QGroupBox, QMessageBox,
-    QFileDialog, QWidget, QGridLayout, QFrame, QPushButton,
-    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QFormLayout,
+    QGroupBox,
+    QFileDialog,
+    QWidget,
+    QGridLayout,
+    QFrame,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QAbstractItemView
 )
+
+from ui.message_dialog import MessageDialog
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont
 
@@ -422,10 +435,10 @@ class ProjectDialog(QDialog):
             # 刷新表格
             self.load_attachment_files()
 
-            QMessageBox.information(self, "上传成功", f"成功上传 {uploaded_count} 个文件")
+            MessageDialog.information(self, "上传成功", f"成功上传 {uploaded_count} 个文件")
 
         except Exception as e:
-            QMessageBox.critical(self, "上传失败", f"文件上传失败: {e}")
+            MessageDialog.critical(self, "上传失败", f"文件上传失败: {e}")
 
     def delete_file(self, row: int, file_type: str):
         """删除文件"""
@@ -440,11 +453,11 @@ class ProjectDialog(QDialog):
         reply = QMessageBox.question(
             self, "确认删除",
             f"确定要删除文件 [{file_name}] 吗？\n此操作不可恢复！",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            MessageDialog.Yes | MessageDialog.No,
+            MessageDialog.No
         )
 
-        if reply == QMessageBox.Yes:
+        if reply == MessageDialog.Yes:
             try:
                 file_path = file_info['path']
                 if os.path.exists(file_path):
@@ -453,9 +466,9 @@ class ProjectDialog(QDialog):
                 # 刷新表格
                 self.load_attachment_files()
 
-                QMessageBox.information(self, "成功", "文件已删除")
+                MessageDialog.information(self, "成功", "文件已删除")
             except Exception as e:
-                QMessageBox.critical(self, "失败", f"删除失败: {e}")
+                MessageDialog.critical(self, "失败", f"删除失败: {e}")
 
     def on_save(self):
         """保存项目"""
@@ -475,7 +488,7 @@ class ProjectDialog(QDialog):
         }
 
         if not project_data['name']:
-            QMessageBox.warning(self, "验证失败", "项目名称不能为空")
+            MessageDialog.warning(self, "验证失败", "项目名称不能为空")
             self.name_input.setFocus()
             return
 
@@ -485,10 +498,10 @@ class ProjectDialog(QDialog):
             success, msg = self.project_manager.create_project(project_data)
 
         if success:
-            QMessageBox.information(self, "成功", "保存成功")
+            MessageDialog.information(self, "成功", "保存成功")
             self.accept()
         else:
-            QMessageBox.critical(self, "失败", f"保存失败: {msg}")
+            MessageDialog.critical(self, "失败", f"保存失败: {msg}")
 
     def _sync_attachment_folders(self):
         """同步附件文件夹（当项目名称改变时）"""

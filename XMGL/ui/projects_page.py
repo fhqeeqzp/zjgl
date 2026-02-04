@@ -3,11 +3,21 @@
 提供项目管理的用户界面 - 使用 QSS 主题
 """
 from PySide6.QtWidgets import (
-    QFrame, QVBoxLayout, QHBoxLayout, QLabel,
-    QWidget, QTableWidget, QTableWidgetItem,
-    QHeaderView, QAbstractItemView, QMessageBox, QMenu,
-    QDialog, QPushButton
+    QFrame,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QAbstractItemView,
+    QMenu,
+    QDialog,
+    QPushButton
 )
+
+from ui.message_dialog import MessageDialog
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QAction
 
@@ -251,7 +261,7 @@ class ProjectsPage(QFrame):
         """编辑项目事件"""
         selected_rows = self.table.selectedIndexes()
         if not selected_rows:
-            QMessageBox.warning(self, "提示", "请先选择要编辑的项目")
+            MessageDialog.warning(self, "提示", "请先选择要编辑的项目")
             return
         
         row = selected_rows[0].row()
@@ -275,7 +285,7 @@ class ProjectsPage(QFrame):
         """删除项目事件"""
         selected_rows = self.table.selectedIndexes()
         if not selected_rows:
-            QMessageBox.warning(self, "提示", "请先选择要删除的项目")
+            MessageDialog.warning(self, "提示", "请先选择要删除的项目")
             return
         
         row = selected_rows[0].row()
@@ -285,27 +295,27 @@ class ProjectsPage(QFrame):
         project_id = self.project_ids[row]
         project = self.project_manager.get_project(project_id)
         if not project:
-            QMessageBox.warning(self, "提示", "项目不存在")
+            MessageDialog.warning(self, "提示", "项目不存在")
             return
         
         project_code = project.project_code
         
         # 确认删除
-        reply = QMessageBox.question(
+        reply = MessageDialog.question(
             self, "确认删除",
             f"确定要删除项目 [{project_code}] 吗？\n此操作不可恢复！",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            MessageDialog.Yes | MessageDialog.No,
+            MessageDialog.No
         )
-        
-        if reply == QMessageBox.Yes:
+
+        if reply == MessageDialog.Yes:
             success, msg = self.project_manager.delete_project(project_id)
             if success:
-                QMessageBox.information(self, "成功", "项目已删除")
+                MessageDialog.information(self, "成功", "项目已删除")
                 self.refresh_table()
                 self.update_statistics()
             else:
-                QMessageBox.critical(self, "失败", f"删除失败: {msg}")
+                MessageDialog.critical(self, "失败", f"删除失败: {msg}")
     
     def on_refresh(self):
         """刷新数据事件"""
@@ -423,26 +433,26 @@ class ProjectsPage(QFrame):
         """根据ID删除项目"""
         project = self.project_manager.get_project(project_id)
         if not project:
-            QMessageBox.warning(self, "提示", "项目不存在")
+            MessageDialog.warning(self, "提示", "项目不存在")
             return
         
         project_code = project.project_code
         
-        reply = QMessageBox.question(
+        reply = MessageDialog.question(
             self, "确认删除",
             f"确定要删除项目 [{project_code}] 吗？\n此操作不可恢复！",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            MessageDialog.Yes | MessageDialog.No,
+            MessageDialog.No
         )
-        
-        if reply == QMessageBox.Yes:
+
+        if reply == MessageDialog.Yes:
             success, msg = self.project_manager.delete_project(project_id)
             if success:
-                QMessageBox.information(self, "成功", "项目已删除")
+                MessageDialog.information(self, "成功", "项目已删除")
                 self.refresh_table()
                 self.update_statistics()
             else:
-                QMessageBox.critical(self, "失败", f"删除失败: {msg}")
+                MessageDialog.critical(self, "失败", f"删除失败: {msg}")
     
     # ==================== 主题应用 ====================
     

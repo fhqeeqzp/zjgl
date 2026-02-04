@@ -2,10 +2,19 @@
 统一风格的对话框组件 - 使用 QSS 主题
 """
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QSpinBox, QFormLayout, QFrame, QMessageBox,
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QSpinBox,
+    QFormLayout,
+    QFrame,
     QGraphicsDropShadowEffect
 )
+
+from ui.message_dialog import MessageDialog
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QColor
 
@@ -238,19 +247,19 @@ class ChangePasswordDialog(BaseDialog):
 
         # 验证输入
         if not old_pwd:
-            QMessageBox.warning(self, "提示", "请输入原密码")
+            MessageDialog.warning(self, "提示", "请输入原密码")
             return
 
         if not new_pwd:
-            QMessageBox.warning(self, "提示", "请输入新密码")
+            MessageDialog.warning(self, "提示", "请输入新密码")
             return
 
         if new_pwd != confirm_pwd:
-            QMessageBox.warning(self, "提示", "两次输入的新密码不一致")
+            MessageDialog.warning(self, "提示", "两次输入的新密码不一致")
             return
 
         if len(new_pwd) < 6:
-            QMessageBox.warning(self, "提示", "新密码长度不能少于6位")
+            MessageDialog.warning(self, "提示", "新密码长度不能少于6位")
             return
 
         # 验证原密码并更新
@@ -264,7 +273,7 @@ class ChangePasswordDialog(BaseDialog):
                 )
 
                 if not result or len(result) == 0:
-                    QMessageBox.warning(self, "错误", "原密码错误")
+                    MessageDialog.warning(self, "错误", "原密码错误")
                     return
 
                 # 更新密码
@@ -275,13 +284,13 @@ class ChangePasswordDialog(BaseDialog):
                 )
 
                 self.success = True
-                QMessageBox.information(self, "成功", "密码修改成功")
+                MessageDialog.information(self, "成功", "密码修改成功")
                 self.accept()
 
             except Exception as e:
-                QMessageBox.critical(self, "错误", f"修改密码失败: {str(e)}")
+                MessageDialog.critical(self, "错误", f"修改密码失败: {str(e)}")
         else:
-            QMessageBox.warning(self, "错误", "数据库未连接")
+            MessageDialog.warning(self, "错误", "数据库未连接")
 
 
 class PasswordVerifyDialog(BaseDialog):
@@ -383,7 +392,7 @@ class PasswordVerifyDialog(BaseDialog):
             self.verified = True
             self.accept()
         else:
-            QMessageBox.warning(self, "验证失败", "密码错误，请重试")
+            MessageDialog.warning(self, "验证失败", "密码错误，请重试")
             self.pwd_input.clear()
             self.pwd_input.setFocus()
 

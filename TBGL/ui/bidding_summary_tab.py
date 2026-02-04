@@ -8,12 +8,29 @@ from pathlib import Path
 from typing import List, Dict, Optional
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QTreeWidget, QTreeWidgetItem, QHeaderView,
-    QAbstractItemView, QComboBox, QGroupBox,
-    QLineEdit, QDoubleSpinBox, QFormLayout, QSplitter,
-    QMessageBox, QDialog, QScrollArea, QMenu
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QHeaderView,
+    QAbstractItemView,
+    QComboBox,
+    QGroupBox,
+    QLineEdit,
+    QDoubleSpinBox,
+    QFormLayout,
+    QSplitter,
+    QDialog,
+    QScrollArea,
+    QMenu,
+    QMessageBox
 )
+
+from ui.message_dialog import MessageDialog
+
+from ui.message_dialog import MessageDialog
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QColor, QAction
 
@@ -96,7 +113,7 @@ class BiddingSummaryTab(QWidget):
         # 总价显示
         tree_toolbar.addWidget(QLabel("总价:"))
         self.total_label = QLabel("¥ 0.00")
-        self.total_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #e74c3c;")
+        self.total_label.setObjectName("totalLabel")
         tree_toolbar.addWidget(self.total_label)
 
         tree_layout.addLayout(tree_toolbar)
@@ -142,29 +159,7 @@ class BiddingSummaryTab(QWidget):
         # print(f"[树形控件配置] RootIsDecorated: {self.summary_tree.rootIsDecorated()}, Indentation: {self.summary_tree.indentation()}")
         
         # 强制设置树形控件样式，确保连接线显示
-        self.summary_tree.setStyleSheet("""
-            QTreeWidget {
-                background-color: #252525;
-                alternate-background-color: #2A2A2A;
-                color: #E6E6E6;
-                border: 1px solid #444444;
-                border-radius: 8px;
-                padding: 8px;
-            }
-            QTreeWidget::item {
-                height: 32px;
-                padding-left: 4px;
-                border-radius: 4px;
-                margin: 1px 2px;
-            }
-            QTreeWidget::item:hover {
-                background-color: #313244;
-            }
-            QTreeWidget::item:selected {
-                background-color: rgba(78, 201, 255, 0.2);
-                color: #4EC9FF;
-            }
-        """)
+        self.summary_tree.setObjectName("summaryTree")
 
         self.summary_tree.setHeaderLabels([
             "工程项目及费用名称", "序号", "报价", "其中：主材费", "其中：辅材费",
@@ -288,7 +283,7 @@ class BiddingSummaryTab(QWidget):
 
         # 报价（只读，自动计算）
         self.quote_label = QLabel("¥ 0.00")
-        self.quote_label.setStyleSheet("font-weight: bold; color: #e74c3c; font-size: 14px;")
+        self.quote_label.setObjectName("quoteLabel")
         form_layout.addRow("报价:", self.quote_label)
 
         edit_layout.addWidget(edit_group)
@@ -432,12 +427,12 @@ class BiddingSummaryTab(QWidget):
     def on_new_version(self):
         """创建新版本"""
         if not self.current_bidding_id:
-            QMessageBox.warning(self, "提示", "请先选择投标")
+            MessageDialog.warning(self, "提示", "请先选择投标")
             return
-        
+
         # 获取当前所有版本
         versions = self.bidding_manager.get_summary_versions(self.current_bidding_id)
-        
+
         # 生成新版本号
         if versions:
             latest_version = versions[0].get('version', 'V1.0')
@@ -449,21 +444,21 @@ class BiddingSummaryTab(QWidget):
                 new_version = f"V{len(versions) + 1}.0"
         else:
             new_version = "V1.0"
-        
+
         # 弹出对话框输入版本信息
         from PySide6.QtWidgets import QInputDialog, QLineEdit
-        
+
         version_name, ok = QInputDialog.getText(
-            self, "新建版本", "版本名称:", 
+            self, "新建版本", "版本名称:",
             QLineEdit.Normal, f"版本 {new_version}"
         )
-        
+
         if not ok:
             return
-        
+
         # 收集当前数据
         items_data = []
-        
+
         def collect_items(item: QTreeWidgetItem, parent_temp_id: int = None):
             summary_item = item.data(0, Qt.UserRole)
             if summary_item:
@@ -484,17 +479,17 @@ class BiddingSummaryTab(QWidget):
                     'tax_fee': summary_item.tax_fee,
                 }
                 items_data.append(item_data)
-                
+
                 for i in range(item.childCount()):
                     collect_items(item.child(i), temp_id)
-        
+
         for i in range(self.summary_tree.topLevelItemCount()):
             collect_items(self.summary_tree.topLevelItem(i))
-        
+
         if not items_data:
-            QMessageBox.warning(self, "提示", "当前没有数据")
+            MessageDialog.warning(self, "提示", "当前没有数据")
             return
-        
+
         # 保存新版本
         success, result = self.bidding_manager.save_bidding_summary(
             self.current_bidding_id,
@@ -504,9 +499,9 @@ class BiddingSummaryTab(QWidget):
             created_by="",
             remark=""
         )
-        
+
         if success:
-            QMessageBox.information(self, "成功", f"新版本 {new_version} 已创建")
+            self.show_message_box(QMessageBox.Information, "成功", f"新版本 {new_version} 已创建")
             self.load_version_combo()
             # 选中新创建的版本
             for i in range(self.version_combo.count()):
@@ -514,34 +509,31 @@ class BiddingSummaryTab(QWidget):
                     self.version_combo.setCurrentIndex(i)
                     break
         else:
-            QMessageBox.critical(self, "错误", f"创建版本失败:\n{result}")
+            self.show_message_box(QMessageBox.Critical, "错误", f"创建版本失败:\n{result}")
     
     def on_delete_version(self):
         """删除当前版本"""
         if not self.current_bidding_id:
-            QMessageBox.warning(self, "提示", "请先选择投标")
+            MessageDialog.warning(self, "提示", "请先选择投标")
             return
         
         version_id = self.version_combo.currentData()
         if not version_id:
-            QMessageBox.warning(self, "提示", "请先选择要删除的版本")
+            MessageDialog.warning(self, "提示", "请先选择要删除的版本")
             return
         
         # 确认删除
-        reply = QMessageBox.question(
-            self, "确认删除", 
-            "确定要删除当前版本吗？\n此操作不可恢复！",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+        reply = MessageDialog.question(self, "确认删除", "确定要删除当前版本吗？\n此操作不可恢复！", MessageDialog.Yes | MessageDialog.No,
+            MessageDialog.No
         )
         
-        if reply != QMessageBox.Yes:
+        if reply != MessageDialog.Yes:
             return
         
         success, msg = self.bidding_manager.delete_summary_version(version_id)
         
         if success:
-            QMessageBox.information(self, "成功", "版本已删除")
+            MessageDialog.information(self, "成功", "版本已删除")
             self.load_version_combo()
             # 重新加载数据
             self.load_bidding_data(self.current_bidding_id)
@@ -595,12 +587,12 @@ class BiddingSummaryTab(QWidget):
     def on_import_excel(self):
         """导入Excel"""
         if not self.current_bidding_id:
-            QMessageBox.warning(self, "提示", "请先选择投标")
+            MessageDialog.warning(self, "提示", "请先选择投标")
             return
 
         excel_path = self.excel_selector.get_selected_file()
         if not excel_path:
-            QMessageBox.warning(self, "提示", "请先选择Excel文件")
+            MessageDialog.warning(self, "提示", "请先选择Excel文件")
             return
 
         # 打开导入对话框
@@ -609,7 +601,7 @@ class BiddingSummaryTab(QWidget):
             imported_data = dialog.get_imported_data()
             if imported_data:
                 self.build_tree_from_imported_data(imported_data)
-                QMessageBox.information(self, "成功", f"成功导入 {len(imported_data)} 条数据")
+                MessageDialog.information(self, "成功", f"成功导入 {len(imported_data)} 条数据")
 
     def build_tree_from_imported_data(self, data: List[Dict]):
         """从导入的数据构建树形结构"""
@@ -742,7 +734,7 @@ class BiddingSummaryTab(QWidget):
         """提升节点层级（变为父节点的兄弟）- 支持多选批量操作"""
         selected_items = self.summary_tree.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "提示", "请先选择要提升层级的节点")
+            MessageDialog.warning(self, "提示", "请先选择要提升层级的节点")
             return
 
         # 过滤掉无法提升的节点（根节点）
@@ -752,11 +744,11 @@ class BiddingSummaryTab(QWidget):
                 movable_items.append(item)
 
         if not movable_items:
-            QMessageBox.warning(self, "提示", "选中的节点都是根节点，无法提升层级")
+            MessageDialog.warning(self, "提示", "选中的节点都是根节点，无法提升层级")
             return
 
         if len(movable_items) < len(selected_items):
-            QMessageBox.information(self, "提示", f"已跳过 {len(selected_items) - len(movable_items)} 个根节点")
+            MessageDialog.information(self, "提示", f"已跳过 {len(selected_items) - len(movable_items)} 个根节点")
 
         # 按在树中的位置排序（从上到下），确保处理顺序正确
         movable_items.sort(key=lambda item: self._get_item_sort_key(item))
@@ -805,7 +797,7 @@ class BiddingSummaryTab(QWidget):
         """降低节点层级（变为前一个兄弟的子节点）- 支持多选批量操作"""
         selected_items = self.summary_tree.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "提示", "请先选择要降低层级的节点")
+            MessageDialog.warning(self, "提示", "请先选择要降低层级的节点")
             return
 
         # 过滤掉无法降低的节点（每个父节点下的第一个子节点）
@@ -824,11 +816,11 @@ class BiddingSummaryTab(QWidget):
                     movable_items.append(item)
 
         if not movable_items:
-            QMessageBox.warning(self, "提示", "选中的节点都是第一个子节点，无法降低层级")
+            MessageDialog.warning(self, "提示", "选中的节点都是第一个子节点，无法降低层级")
             return
 
         if len(movable_items) < len(selected_items):
-            QMessageBox.information(self, "提示", f"已跳过 {len(selected_items) - len(movable_items)} 个第一个子节点")
+            MessageDialog.information(self, "提示", f"已跳过 {len(selected_items) - len(movable_items)} 个第一个子节点")
 
         # 按在树中的位置排序（从上到下），确保处理顺序正确
         movable_items.sort(key=lambda item: self._get_item_sort_key(item))
@@ -993,7 +985,7 @@ class BiddingSummaryTab(QWidget):
     def add_item(self, item_type: SummaryItemType):
         """添加节点"""
         if not self.current_bidding_id:
-            QMessageBox.warning(self, "提示", "请先选择投标")
+            MessageDialog.warning(self, "提示", "请先选择投标")
             return
 
         # 获取当前选中的节点
@@ -1034,12 +1026,12 @@ class BiddingSummaryTab(QWidget):
     def add_child_item(self):
         """添加子项目"""
         if not self.current_bidding_id:
-            QMessageBox.warning(self, "提示", "请先选择投标")
+            MessageDialog.warning(self, "提示", "请先选择投标")
             return
 
         current = self.summary_tree.currentItem()
         if not current:
-            QMessageBox.warning(self, "提示", "请先选择一个节点")
+            MessageDialog.warning(self, "提示", "请先选择一个节点")
             return
 
         tree_item = QTreeWidgetItem(current)
@@ -1056,12 +1048,12 @@ class BiddingSummaryTab(QWidget):
     def delete_item(self):
         """删除节点 - 支持多选批量删除"""
         if not self.current_bidding_id:
-            QMessageBox.warning(self, "提示", "请先选择投标")
+            MessageDialog.warning(self, "提示", "请先选择投标")
             return
 
         selected_items = self.summary_tree.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "提示", "请先选择要删除的节点")
+            MessageDialog.warning(self, "提示", "请先选择要删除的节点")
             return
 
         # 统计信息
@@ -1123,24 +1115,7 @@ class BiddingSummaryTab(QWidget):
     def show_context_menu(self, position):
         """显示右键菜单"""
         menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: #3c3c3c;
-                color: #ffffff;
-                border: 1px solid #555555;
-            }
-            QMenu::item {
-                padding: 5px 20px;
-            }
-            QMenu::item:selected {
-                background-color: #0078d4;
-            }
-            QMenu::separator {
-                height: 1px;
-                background-color: #555555;
-                margin: 5px 0px;
-            }
-        """)
+        menu.setObjectName("contextMenu")
 
         # 层级操作
         level_up_action = QAction("⬆️ 提升层级", self)
@@ -1179,7 +1154,7 @@ class BiddingSummaryTab(QWidget):
     def reset_all_to_level_one(self):
         """将所有节点重置为级别1，保持原有顺序"""
         if not self.current_bidding_id:
-            QMessageBox.warning(self, "提示", "请先选择投标")
+            MessageDialog.warning(self, "提示", "请先选择投标")
             return
 
         # 收集所有节点数据（按当前顺序）
@@ -1232,7 +1207,7 @@ class BiddingSummaryTab(QWidget):
             collect_items(self.summary_tree.topLevelItem(i))
 
         if not all_items_data:
-            QMessageBox.information(self, "提示", "没有数据需要重置")
+            MessageDialog.information(self, "提示", "没有数据需要重置")
             return
 
         # 确认对话框
@@ -1240,11 +1215,11 @@ class BiddingSummaryTab(QWidget):
             self, "确认重置",
             f"确定要将所有 {len(all_items_data)} 个节点重置为级别1吗？\n"
             f"这将保持原有顺序，但所有节点都变为平级。",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            MessageDialog.Yes | MessageDialog.No,
+            MessageDialog.No
         )
 
-        if reply != QMessageBox.Yes:
+        if reply != MessageDialog.Yes:
             return
 
         # 清空树
@@ -1272,22 +1247,19 @@ class BiddingSummaryTab(QWidget):
             self.update_tree_item(tree_item, new_item)
 
         self.calculate_total()
-        QMessageBox.information(self, "成功", f"已重置 {len(all_items_data)} 个节点为级别1")
+        MessageDialog.information(self, "成功", f"已重置 {len(all_items_data)} 个节点为级别1")
 
     def clear_all(self):
         """清空全部"""
         if not self.current_bidding_id:
-            QMessageBox.warning(self, "提示", "请先选择投标")
+            MessageDialog.warning(self, "提示", "请先选择投标")
             return
 
-        reply = QMessageBox.question(
-            self, "确认清空",
-            "确定要清空所有项目吗？\n此操作不可恢复！",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+        reply = MessageDialog.question(self, "确认清空", "确定要清空所有项目吗？\n此操作不可恢复！", MessageDialog.Yes | MessageDialog.No,
+            MessageDialog.No
         )
 
-        if reply == QMessageBox.Yes:
+        if reply == MessageDialog.Yes:
             self.summary_tree.clear()
             self.calculate_total()
 
@@ -1378,7 +1350,7 @@ class BiddingSummaryTab(QWidget):
 
         # 获取当前选中的投标信息
         if not self.current_bidding_id:
-            QMessageBox.warning(self, "提示", "请先选择投标")
+            MessageDialog.warning(self, "提示", "请先选择投标")
             return
 
         # 获取工程项目及费用名称
@@ -1410,7 +1382,7 @@ class BiddingSummaryTab(QWidget):
         """应用编辑"""
         current = self.summary_tree.currentItem()
         if not current:
-            QMessageBox.warning(self, "提示", "请先选择一个节点")
+            MessageDialog.warning(self, "提示", "请先选择一个节点")
             return
 
         item = current.data(0, Qt.UserRole)
@@ -1433,7 +1405,7 @@ class BiddingSummaryTab(QWidget):
         self.update_tree_item(current, item)
         self.calculate_total()
 
-        QMessageBox.information(self, "成功", "修改已应用")
+        MessageDialog.information(self, "成功", "修改已应用")
 
     def calculate_total(self):
         """计算总价"""
@@ -1479,7 +1451,7 @@ class BiddingSummaryTab(QWidget):
     def on_save(self):
         """保存汇总表到数据库"""
         if not self.current_bidding_id:
-            QMessageBox.warning(self, "提示", "请先选择投标")
+            MessageDialog.warning(self, "提示", "请先选择投标")
             return
 
         # 收集所有节点数据
@@ -1518,7 +1490,7 @@ class BiddingSummaryTab(QWidget):
             collect_items(self.summary_tree.topLevelItem(i))
 
         if not items_data:
-            QMessageBox.warning(self, "提示", "没有数据需要保存")
+            MessageDialog.warning(self, "提示", "没有数据需要保存")
             return
 
         # 获取当前版本ID
@@ -1531,11 +1503,11 @@ class BiddingSummaryTab(QWidget):
                 items_data
             )
             if success:
-                QMessageBox.information(self, "成功", f"当前版本已更新\n共 {len(items_data)} 条记录")
+                MessageDialog.information(self, "成功", f"当前版本已更新\n共 {len(items_data)} 条记录")
                 # 刷新版本列表显示
                 self.load_version_combo()
             else:
-                QMessageBox.critical(self, "错误", f"更新失败:\n{result}")
+                MessageDialog.critical(self, "错误", f"更新失败:\n{result}")
         else:
             # 没有当前版本，创建新版本
             version = "V1.0"
@@ -1551,7 +1523,7 @@ class BiddingSummaryTab(QWidget):
             )
             
             if success:
-                QMessageBox.information(self, "成功", f"新版本已创建\n共 {len(items_data)} 条记录")
+                MessageDialog.information(self, "成功", f"新版本已创建\n共 {len(items_data)} 条记录")
                 # 刷新版本列表并选中新版本
                 self.load_version_combo()
                 for i in range(self.version_combo.count()):
@@ -1559,4 +1531,4 @@ class BiddingSummaryTab(QWidget):
                         self.version_combo.setCurrentIndex(i)
                         break
             else:
-                QMessageBox.critical(self, "错误", f"保存失败:\n{result}")
+                MessageDialog.critical(self, "错误", f"保存失败:\n{result}")

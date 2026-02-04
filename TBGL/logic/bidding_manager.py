@@ -681,13 +681,9 @@ class BiddingManager:
             # 保存新的明细项目
             id_mapping = {}
             
-            print(f"[更新汇总表] 开始保存 {len(items)} 条数据")
-            
             for idx, item in enumerate(items):
                 parent_temp_id = item.get('parent_temp_id')
                 parent_db_id = id_mapping.get(parent_temp_id) if parent_temp_id is not None else None
-                
-                print(f"[更新汇总表] 第{idx+1}条: temp_id={item.get('temp_id')}, parent_temp_id={parent_temp_id}, parent_db_id={parent_db_id}, name={item.get('name', '')[:20]}")
                 
                 sql_item = """
                 INSERT INTO bidding_summary_items
@@ -722,14 +718,10 @@ class BiddingManager:
                 temp_id = item.get('temp_id')
                 if temp_id is not None:
                     id_mapping[temp_id] = db_id
-                    print(f"[更新汇总表]   -> 建立映射: temp_id={temp_id} -> db_id={db_id}")
-            
-            print(f"[更新汇总表] 保存完成")
             self._notify_observers('SUMMARY_UPDATED', {'summary_id': summary_id})
             return True, "更新成功"
             
         except Exception as e:
-            print(f"[更新汇总表] 错误: {e}")
             return False, f"更新汇总表失败: {e}"
     
     def get_bidding_summary(self, bidding_id: int, version: str = None) -> List[Dict]:
