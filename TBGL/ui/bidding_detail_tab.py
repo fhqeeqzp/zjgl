@@ -368,6 +368,12 @@ class BiddingDetailTab(QWidget):
         toolbar_layout.addWidget(self.column_settings_btn)
 
         toolbar_layout.addStretch()
+
+        # 保存明细按钮
+        self.save_btn = PrimaryPushButton("💾 保存明细")
+        self.save_btn.clicked.connect(self.on_save_detail)
+        toolbar_layout.addWidget(self.save_btn)
+
         table_layout.addLayout(toolbar_layout)
 
         # 树形表格 - 使用QTreeWidget替代QTableWidget以支持层级
@@ -439,16 +445,6 @@ class BiddingDetailTab(QWidget):
         self.detail_tree.itemDoubleClicked.connect(self.on_item_double_clicked)
 
         table_layout.addWidget(self.detail_tree)
-
-        # 底部按钮区域
-        bottom_layout = QHBoxLayout()
-        bottom_layout.addStretch()
-
-        self.save_btn = PrimaryPushButton("💾 保存明细")
-        self.save_btn.clicked.connect(self.on_save_detail)
-        bottom_layout.addWidget(self.save_btn)
-
-        table_layout.addLayout(bottom_layout)
         content_layout.addWidget(table_frame)
 
         layout.addWidget(self.content_widget)

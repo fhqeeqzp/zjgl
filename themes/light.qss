@@ -126,14 +126,54 @@ QGroupBox {
     color: #1A1A1A;
 }
 
+/* ------------------------------
+    浅色 · 悬浮自动隐藏滚动条
+ ------------------------------ */
 QScrollBar:vertical {
-    background: #FAFAFA;
+    background: transparent;
+    width: 6px;
+    margin: 0;
 }
 QScrollBar::handle:vertical {
-    background: #CCCCCC;
+    background: rgba(120, 120, 140, 0.25);
+    border-radius: 3px;
+    min-height: 30px;
+    margin: 2px;
 }
 QScrollBar::handle:vertical:hover {
-    background: #BBBBBB;
+    background: rgba(160, 160, 180, 0.6);
+    width: 10px;
+    margin: 2px 0;
+}
+QScrollBar::handle:vertical:pressed {
+    background: rgba(190, 190, 210, 0.8);
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 6px;
+    margin: 0;
+}
+QScrollBar::handle:horizontal {
+    background: rgba(120, 120, 140, 0.25);
+    border-radius: 3px;
+    min-width: 30px;
+    margin: 2px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: rgba(160, 160, 180, 0.6);
+    height: 10px;
+    margin: 0 2px;
+}
+QScrollBar::handle:horizontal:pressed {
+    background: rgba(190, 190, 210, 0.8);
+}
+
+QScrollBar::add-line,
+QScrollBar::sub-line,
+QScrollBar::add-page,
+QScrollBar::sub-page {
+    background: none;
 }
 
 QMenuBar {

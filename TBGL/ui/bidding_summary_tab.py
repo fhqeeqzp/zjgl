@@ -122,6 +122,11 @@ class BiddingSummaryTab(QWidget):
 
         excel_toolbar.addStretch()
 
+        # 保存汇总表按钮
+        self.save_btn = PrimaryPushButton("💾 保存汇总表")
+        self.save_btn.clicked.connect(self.on_save)
+        excel_toolbar.addWidget(self.save_btn)
+
         tree_layout.addLayout(excel_toolbar)
 
         # 树形控件
@@ -201,17 +206,6 @@ class BiddingSummaryTab(QWidget):
         self.summary_tree.customContextMenuRequested.connect(self.show_context_menu)
 
         tree_layout.addWidget(self.summary_tree)
-
-        # 底部工具栏
-        bottom_toolbar = QHBoxLayout()
-
-        bottom_toolbar.addStretch()
-
-        self.save_btn = PrimaryPushButton("💾 保存汇总表")
-        self.save_btn.clicked.connect(self.on_save)
-        bottom_toolbar.addWidget(self.save_btn)
-
-        tree_layout.addLayout(bottom_toolbar)
 
         splitter.addWidget(tree_widget)
 

@@ -310,19 +310,54 @@ class StyleSheetManager:
                 border-top-right-radius: {StyleSheetManager.BORDER_RADIUS_LARGE};
             }}
 
-            /* 滚动条微调（可选） */
+            /* ------------------------------
+                悬浮自动隐藏滚动条
+             ------------------------------ */
             QTableWidget QScrollBar:vertical {{
                 background: transparent;
-                width: 12px;
-                margin: 0px;
+                width: 6px;
+                margin: 0;
             }}
             QTableWidget QScrollBar::handle:vertical {{
-                background: {theme.get('scrollbar_handle', theme['border'])};
-                border-radius: 6px;
-                min-height: 20px;
+                background: rgba(120, 120, 140, 0.25);
+                border-radius: 3px;
+                min-height: 30px;
+                margin: 2px;
             }}
             QTableWidget QScrollBar::handle:vertical:hover {{
-                background: {theme.get('scrollbar_handle_hover', theme['accent'])};
+                background: rgba(160, 160, 180, 0.6);
+                width: 10px;
+                margin: 2px 0;
+            }}
+            QTableWidget QScrollBar::handle:vertical:pressed {{
+                background: rgba(190, 190, 210, 0.8);
+            }}
+
+            QTableWidget QScrollBar:horizontal {{
+                background: transparent;
+                height: 6px;
+                margin: 0;
+            }}
+            QTableWidget QScrollBar::handle:horizontal {{
+                background: rgba(120, 120, 140, 0.25);
+                border-radius: 3px;
+                min-width: 30px;
+                margin: 2px;
+            }}
+            QTableWidget QScrollBar::handle:horizontal:hover {{
+                background: rgba(160, 160, 180, 0.6);
+                height: 10px;
+                margin: 0 2px;
+            }}
+            QTableWidget QScrollBar::handle:horizontal:pressed {{
+                background: rgba(190, 190, 210, 0.8);
+            }}
+
+            QTableWidget QScrollBar::add-line,
+            QTableWidget QScrollBar::sub-line,
+            QTableWidget QScrollBar::add-page,
+            QTableWidget QScrollBar::sub-page {{
+                background: none;
             }}
         """
 
