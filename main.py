@@ -10,9 +10,9 @@ os.environ['QT_LOGGING_RULES'] = '*.warning=false;qt.svg.warning=false;qt.png.wa
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QStackedWidget, QFrame, QGraphicsDropShadowEffect
+    QStackedWidget, QFrame, QGraphicsDropShadowEffect, QDialog
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QObject
 from PySide6.QtGui import QColor, QFont
 
 from themes import ThemeManager
@@ -162,31 +162,112 @@ class MainWindow(QMainWindow):
         self.title_bar.set_db_manager(db_manager)
 
 
-class DialogFramelessFilter:
-    """对话框无边框过滤器 - 自动为所有对话框设置无边框"""
+def patch_dialogs():
+    """补丁：让所有对话框默认无边框"""
+    from PySide6.QtWidgets import QDialog, QMessageBox
 
-    def __init__(self, app):
-        self.app = app
-        # 安装事件过滤器到应用程序
-        self.app.installEventFilter(self)
+    # 保存原始的QDialog构造函数
+    QDialog._original_init = QDialog.__init__
 
-    def eventFilter(self, obj, event):
-        from PySide6.QtWidgets import QDialog, QMessageBox
-        # 当对话框或消息框创建时，设置无边框
-        if event.type() == 129:  # QEvent.Type.Show (129)
-            if isinstance(obj, (QDialog, QMessageBox)):
-                # 设置无边框窗口，但保留关闭按钮
-                obj.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
-        return False
+    def _patched_dialog_init(self, parent=None, flags=Qt.WindowFlags()):
+        # 调用原始构造函数，添加无边框标志
+        QDialog._original_init(self, parent, flags | Qt.FramelessWindowHint)
+
+    # 替换构造函数
+    QDialog.__init__ = _patched_dialog_init
+
+    # 同样处理QMessageBox实例
+    QMessageBox._original_init = QMessageBox.__init__
+
+    def _patched_msgbox_init(self, *args, **kwargs):
+        QMessageBox._original_init(self, *args, **kwargs)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+
+    QMessageBox.__init__ = _patched_msgbox_init
+
+    # 处理QMessageBox的静态方法
+    QMessageBox._original_information = QMessageBox.information
+    QMessageBox._original_warning = QMessageBox.warning
+    QMessageBox._original_critical = QMessageBox.critical
+    QMessageBox._original_question = QMessageBox.question
+    QMessageBox._original_about = QMessageBox.about
+
+    def _patched_information(parent, title, text, buttons=QMessageBox.StandardButton.Ok, defaultButton=QMessageBox.StandardButton.NoButton):
+        msg_box = QMessageBox(parent)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(text)
+        msg_box.setStandardButtons(buttons)
+        msg_box.setDefaultButton(defaultButton)
+        msg_box.setIcon(QMessageBox.Information)
+        msg_box.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        return msg_box.exec()
+
+    def _patched_warning(parent, title, text, buttons=QMessageBox.StandardButton.Ok, defaultButton=QMessageBox.StandardButton.NoButton):
+        msg_box = QMessageBox(parent)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(text)
+        msg_box.setStandardButtons(buttons)
+        msg_box.setDefaultButton(defaultButton)
+        msg_box.setIcon(QMessageBox.Warning)
+        msg_box.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        return msg_box.exec()
+
+    def _patched_critical(parent, title, text, buttons=QMessageBox.StandardButton.Ok, defaultButton=QMessageBox.StandardButton.NoButton):
+        msg_box = QMessageBox(parent)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(text)
+        msg_box.setStandardButtons(buttons)
+        msg_box.setDefaultButton(defaultButton)
+        msg_box.setIcon(QMessageBox.Critical)
+        msg_box.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        return msg_box.exec()
+
+    def _patched_question(parent, title, text, buttons=QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, defaultButton=QMessageBox.StandardButton.NoButton):
+        msg_box = QMessageBox(parent)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(text)
+        msg_box.setStandardButtons(buttons)
+        msg_box.setDefaultButton(defaultButton)
+        msg_box.setIcon(QMessageBox.Question)
+        msg_box.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        return msg_box.exec()
+
+    def _patched_about(parent, title, text):
+        msg_box = QMessageBox(parent)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(text)
+        msg_box.setStandardButtons(QMessageBox.Ok)
+        msg_box.setIcon(QMessageBox.Information)
+        msg_box.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        return msg_box.exec()
+
+    QMessageBox.information = staticmethod(_patched_information)
+    QMessageBox.warning = staticmethod(_patched_warning)
+    QMessageBox.critical = staticmethod(_patched_critical)
+    QMessageBox.question = staticmethod(_patched_question)
+    QMessageBox.about = staticmethod(_patched_about)
+
+    # 处理QProgressDialog
+    from PySide6.QtWidgets import QProgressDialog
+    QProgressDialog._original_init = QProgressDialog.__init__
+
+    def _patched_progress_init(self, labelText="", cancelButtonText="", minimum=0, maximum=100, parent=None, flags=Qt.WindowFlags()):
+        QProgressDialog._original_init(self, labelText, cancelButtonText, minimum, maximum, parent, flags | Qt.FramelessWindowHint)
+        # 设置固定大小
+        self.setFixedSize(400, 120)
+        # 禁用调整大小
+        self.setWindowFlag(Qt.MSWindowsFixedSizeDialogHint, True)
+
+    QProgressDialog.__init__ = _patched_progress_init
 
 
 def main():
+    # 应用对话框无边框补丁（在创建任何对话框之前）
+    patch_dialogs()
+
     # 创建应用程序
     app = QApplication(sys.argv)
     app.setFont(QFont("Microsoft YaHei", 10))
-
-    # 安装对话框无边框过滤器
-    dialog_filter = DialogFramelessFilter(app)
 
     # 创建主题管理器并设置应用程序（自动加载 QSS）
     theme_manager = ThemeManager()
