@@ -27,6 +27,7 @@ from PySide6.QtGui import QFont, QAction
 
 from ui.fluent_widgets import PushButton, PrimaryPushButton
 from .detail_import_dialog import DetailImportDialog
+from .visual_import_dialog import VisualImportDialog
 from .excel_import_dialog import ExcelFileSelector
 
 
@@ -793,7 +794,7 @@ class BiddingDetailTab(QWidget):
         self.calculate_total()
 
     def on_import_excel(self):
-        """导入Excel明细"""
+        """导入Excel明细 - 使用可视化导入对话框"""
         if not self.current_bidding_id:
             MessageDialog.warning(self, "提示", "请先选择投标")
             return
@@ -803,9 +804,21 @@ class BiddingDetailTab(QWidget):
             MessageDialog.warning(self, "提示", "请先选择Excel文件")
             return
 
-        # 打开导入对话框，传入汇总项名称作为顶级行名称
+        # 步骤1: 打开可视化识别对话框，让用户手动标记行类型
         summary_name = self.current_summary_item.name if self.current_summary_item else ""
+        visual_dialog = VisualImportDialog(excel_path, self)
+        
+        if visual_dialog.exec() != VisualImportDialog.Accepted:
+            return  # 用户取消了导入
+        
+        # 获取用户标记的行类型信息
+        row_types = visual_dialog.get_row_types()
+        
+        # 步骤2: 打开原导入对话框进行列映射和最终导入
+        # 传入用户标记的行类型，让导入对话框使用这些标记
         dialog = DetailImportDialog(excel_path, self.current_bidding_name, summary_name, self)
+        dialog.set_row_types(row_types)  # 设置用户标记的行类型
+        
         if dialog.exec() == DetailImportDialog.Accepted:
             imported_data = dialog.get_imported_data()
             if imported_data:

@@ -1260,7 +1260,7 @@ class DetailImportDialog(QDialog):
         return cleaned_items
 
     def import_data_with_progress(self, progress_dialog: ImportProgressDialog) -> List[Dict]:
-        """导入数据（带进度显示）- 增强版，支持智能行识别和中间表头处理"""
+        """导入数据（带进度显示）- 增强版，支持智能行识别和中间表头处理，支持用户手动标记行类型"""
         if not self.current_sheet_name or not self.excel_path:
             return []
 
@@ -1271,6 +1271,10 @@ class DetailImportDialog(QDialog):
             if is_required and field_key not in mapping:
                 MessageDialog.warning(self, "提示", f"必须配置 {field_name} 列")
                 return []
+
+        # 获取用户手动标记的行类型（如果有）
+        user_row_types = getattr(self, '_user_row_types', None)
+        use_manual_types = user_row_types is not None and len(user_row_types) > 0
 
         try:
             workbook = load_workbook(self.excel_path, data_only=True)
@@ -1296,57 +1300,104 @@ class DetailImportDialog(QDialog):
                 if progress_dialog.is_cancelled:
                     break
                 
+                # 计算实际Excel行号
+                actual_row = start_row + row_idx - 1
+                
                 try:
-                    # 检测是否为表头行或汇总行，如果是则跳过
-                    # 注意：遇到表头行时不保存pending_item，因为后面可能有续行
-                    if self._is_header_row(row, mapping):
-                        continue
-
-                    # 如果有待合并的项，先检查当前行是否应该与它合并
-                    # 这可以处理跨越表头的续行（如"直" + "径(mm) 20"）
-                    if pending_item and self._should_merge_with_previous(row, pending_item, mapping):
-                        # 合并数据
-                        pending_item = self._merge_rows(pending_item, row, mapping)
-                        last_data_row_idx = row_idx
-                        continue
-
-                    # 检测是否为分部行
-                    if self._is_division_row(row, mapping):
-                        name_col = mapping.get('name')
-                        if name_col is not None and name_col < len(row) and row[name_col]:
-                            division_name = str(row[name_col]).strip()
-                            # 保存当前分部名称
-                            current_division = division_name
-                            # 创建分部项
-                            division_item = {
-                                'sequence': '',
-                                'name': division_name,
-                                'specification': '',
-                                'description': '',
-                                'unit': '',
-                                'quantity': 0.0,
-                                'unit_price': 0.0,
-                                'labor_unit_price': 0.0,
-                                'material_unit_price': 0.0,
-                                'material_loss_rate': 0.0,
-                                'auxiliary_unit_price': 0.0,
-                                'machine_unit_price': 0.0,
-                                'other_unit_price': 0.0,
-                                'total_price': 0.0,
-                                'level': 2,  # 分部层级为2（顶级为1）
-                                'remark': '',
-                                'is_division': True  # 标记为分部行
-                            }
-                            # 保存前一行（如果有）
+                    # 如果使用用户手动标记的类型
+                    if use_manual_types:
+                        row_type = user_row_types.get(actual_row)
+                        
+                        # 无效行 - 跳过
+                        if row_type and row_type.value == "无效行":
+                            continue
+                        
+                        # 合并行 - 与前一行合并
+                        if row_type and row_type.value == "合并行":
                             if pending_item:
-                                imported_items.append(pending_item)
-                                progress_dialog.imported_count += 1
-                                pending_item = None
+                                pending_item = self._merge_rows(pending_item, row, mapping)
                                 last_data_row_idx = row_idx
-                            # 添加分部行
-                            imported_items.append(division_item)
-                            progress_dialog.imported_count += 1
-                        continue
+                            continue
+                        
+                        # 父级行/分部行
+                        if row_type and row_type.value == "父级行":
+                            name_col = mapping.get('name')
+                            if name_col is not None and name_col < len(row) and row[name_col]:
+                                division_name = str(row[name_col]).strip()
+                                current_division = division_name
+                                division_item = {
+                                    'sequence': '',
+                                    'name': division_name,
+                                    'specification': '',
+                                    'description': '',
+                                    'unit': '',
+                                    'quantity': 0.0,
+                                    'unit_price': 0.0,
+                                    'labor_unit_price': 0.0,
+                                    'material_unit_price': 0.0,
+                                    'material_loss_rate': 0.0,
+                                    'auxiliary_unit_price': 0.0,
+                                    'machine_unit_price': 0.0,
+                                    'other_unit_price': 0.0,
+                                    'total_price': 0.0,
+                                    'level': 2,
+                                    'remark': '',
+                                    'is_division': True
+                                }
+                                if pending_item:
+                                    imported_items.append(pending_item)
+                                    progress_dialog.imported_count += 1
+                                    pending_item = None
+                                imported_items.append(division_item)
+                                progress_dialog.imported_count += 1
+                            continue
+                        
+                        # 清单行或未知类型 - 正常处理
+                        # 继续执行下面的数据提取逻辑
+                    else:
+                        # 使用自动识别逻辑
+                        # 检测是否为表头行或汇总行，如果是则跳过
+                        if self._is_header_row(row, mapping):
+                            continue
+
+                        # 如果有待合并的项，先检查当前行是否应该与它合并
+                        if pending_item and self._should_merge_with_previous(row, pending_item, mapping):
+                            pending_item = self._merge_rows(pending_item, row, mapping)
+                            last_data_row_idx = row_idx
+                            continue
+
+                        # 检测是否为分部行
+                        if self._is_division_row(row, mapping):
+                            name_col = mapping.get('name')
+                            if name_col is not None and name_col < len(row) and row[name_col]:
+                                division_name = str(row[name_col]).strip()
+                                current_division = division_name
+                                division_item = {
+                                    'sequence': '',
+                                    'name': division_name,
+                                    'specification': '',
+                                    'description': '',
+                                    'unit': '',
+                                    'quantity': 0.0,
+                                    'unit_price': 0.0,
+                                    'labor_unit_price': 0.0,
+                                    'material_unit_price': 0.0,
+                                    'material_loss_rate': 0.0,
+                                    'auxiliary_unit_price': 0.0,
+                                    'machine_unit_price': 0.0,
+                                    'other_unit_price': 0.0,
+                                    'total_price': 0.0,
+                                    'level': 2,
+                                    'remark': '',
+                                    'is_division': True
+                                }
+                                if pending_item:
+                                    imported_items.append(pending_item)
+                                    progress_dialog.imported_count += 1
+                                    pending_item = None
+                                imported_items.append(division_item)
+                                progress_dialog.imported_count += 1
+                            continue
                     
                     # 提取当前行数据
                     item_data = {}
@@ -1407,8 +1458,8 @@ class DetailImportDialog(QDialog):
                         else:
                             item_data['level'] = 1
                     
-                    # 检查是否需要与前一行合并
-                    if pending_item and self._should_merge_with_previous(row, pending_item, mapping):
+                    # 检查是否需要与前一行合并（仅在非手动模式下）
+                    if not use_manual_types and pending_item and self._should_merge_with_previous(row, pending_item, mapping):
                         # 合并数据
                         pending_item = self._merge_rows(pending_item, row, mapping)
                         last_data_row_idx = row_idx  # 更新最后数据行索引
@@ -1527,6 +1578,10 @@ class DetailImportDialog(QDialog):
         else:
             # 导入失败
             progress_dialog.close()
+    
+    def set_row_types(self, row_types: Dict[int, 'RowType']):
+        """设置用户手动标记的行类型（从可视化导入对话框传入）"""
+        self._user_row_types = row_types
     
     def get_imported_data(self) -> List[Dict]:
         """获取导入的数据"""
