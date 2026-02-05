@@ -1268,6 +1268,7 @@ class DetailImportDialog(QDialog):
             pending_item = None  # 待合并的临时项
             current_division = None  # 当前分部名称
             division_stack = []  # 分部层级栈
+            last_data_row_idx = 0  # 最后一条数据行的索引
             
             for row_idx, row in enumerate(sheet.iter_rows(min_row=start_row, values_only=True), start=1):
                 # 检查是否取消
@@ -1276,12 +1277,8 @@ class DetailImportDialog(QDialog):
                 
                 try:
                     # 检测是否为表头行或汇总行，如果是则跳过
+                    # 注意：遇到表头行时不保存pending_item，因为后面可能有续行
                     if self._is_header_row(row, mapping):
-                        # 如果有待合并的项，先保存它
-                        if pending_item:
-                            imported_items.append(pending_item)
-                            progress_dialog.imported_count += 1
-                            pending_item = None
                         continue
                     
                     # 检测是否为分部行
@@ -1316,6 +1313,7 @@ class DetailImportDialog(QDialog):
                                 imported_items.append(pending_item)
                                 progress_dialog.imported_count += 1
                                 pending_item = None
+                                last_data_row_idx = row_idx
                             # 添加分部行
                             imported_items.append(division_item)
                             progress_dialog.imported_count += 1
@@ -1384,6 +1382,7 @@ class DetailImportDialog(QDialog):
                     if pending_item and self._should_merge_with_previous(row, pending_item, mapping):
                         # 合并数据
                         pending_item = self._merge_rows(pending_item, row, mapping)
+                        last_data_row_idx = row_idx  # 更新最后数据行索引
                     else:
                         # 保存前一行（如果有）
                         if pending_item:
@@ -1392,6 +1391,7 @@ class DetailImportDialog(QDialog):
                         
                         # 开始新的项
                         pending_item = item_data
+                        last_data_row_idx = row_idx  # 更新最后数据行索引
                     
                 except Exception as e:
                     error_count += 1
