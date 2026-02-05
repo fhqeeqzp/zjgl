@@ -999,3 +999,201 @@ QDialog#customDialog {
 QDialog#customDialog QLabel {
     color: #ffffff;
 }
+
+/* =============== 可视化导入对话框专用样式 - Dark Theme =============== */
+
+/* 可视化导入对话框 */
+QDialog#visualImportDialog {
+    background-color: #1E1E1E;
+}
+
+QDialog#visualImportDialog QFrame#contentFrame {
+    background-color: #1E1E1E;
+    border: 1px solid #444444;
+    border-radius: 8px;
+}
+
+QDialog#visualImportDialog QFrame#titleBarFrame {
+    background-color: #2D2D2D;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom: 1px solid #444444;
+}
+
+QDialog#visualImportDialog QLabel#titleLabel {
+    color: #E6E6E6;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+QDialog#visualImportDialog QLabel#fileLabel {
+    color: #AAAAAA;
+    font-size: 12px;
+}
+
+QDialog#visualImportDialog QFrame#toolbarFrame {
+    background-color: #252525;
+    border: 1px solid #333333;
+    border-radius: 4px;
+}
+
+QDialog#visualImportDialog QFrame#mappingFrame {
+    background-color: #252525;
+    border: 1px solid #333333;
+    border-radius: 4px;
+}
+
+/* 预览表格样式 */
+QDialog#visualImportDialog QTableWidget#previewTable {
+    background-color: #1E1E1E;
+    color: #E6E6E6;
+    border: 1px solid #444444;
+    gridline-color: #333333;
+    alternate-background-color: #252525;
+}
+
+QDialog#visualImportDialog QTableWidget#previewTable::item {
+    padding: 5px;
+    border: none;
+}
+
+QDialog#visualImportDialog QTableWidget#previewTable::item:selected {
+    background-color: #0078D4;
+    color: #FFFFFF;
+}
+
+QDialog#visualImportDialog QTableWidget#previewTable QHeaderView::section {
+    background-color: #2D2D2D;
+    color: #E6E6E6;
+    padding: 6px;
+    border: 1px solid #444444;
+    font-weight: bold;
+}
+
+/* 第0行（列映射行）样式 */
+QDialog#visualImportDialog QTableWidget#previewTable::item[row="0"] {
+    background-color: #3D3520;
+}
+
+/* 行类型颜色样式 - 深色主题调整 */
+/* 表头/表尾行 - 深红色调 */
+QDialog#visualImportDialog QTableWidget#previewTable[row-type="header"]::item,
+QDialog#visualImportDialog QTableWidget#previewTable[row-type="footer"]::item {
+    background-color: #3D2020;
+    color: #FF9999;
+}
+
+/* 无效行 - 深灰色 */
+QDialog#visualImportDialog QTableWidget#previewTable[row-type="invalid"]::item {
+    background-color: #2A2A2A;
+    color: #666666;
+}
+
+/* 分部行 - 深蓝色调 */
+QDialog#visualImportDialog QTableWidget#previewTable[row-type="division"]::item {
+    background-color: #1A2A3D;
+    color: #66B2FF;
+}
+
+/* 清单行 - 深绿色调 */
+QDialog#visualImportDialog QTableWidget#previewTable[row-type="item"]::item {
+    background-color: #1A3D1A;
+    color: #66FF66;
+}
+
+/* 合并行 - 深黄色调 */
+QDialog#visualImportDialog QTableWidget#previewTable[row-type="merge"]::item {
+    background-color: #3D3D1A;
+    color: #FFFF66;
+}
+
+/* 复选框样式 */
+QDialog#visualImportDialog QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #555555;
+    border-radius: 3px;
+    background-color: #2D2D2D;
+}
+
+QDialog#visualImportDialog QCheckBox::indicator:checked {
+    border: 2px solid #4EC9FF;
+    background-color: #4EC9FF;
+}
+
+QDialog#visualImportDialog QCheckBox::indicator:hover {
+    border-color: #4EC9FF;
+}
+
+/* 下拉框样式 */
+QDialog#visualImportDialog QComboBox {
+    background-color: #2D2D2D;
+    color: #E6E6E6;
+    border: 1px solid #444444;
+    border-radius: 4px;
+    padding: 4px 8px;
+    min-height: 28px;
+}
+
+QDialog#visualImportDialog QComboBox:hover {
+    border-color: #4EC9FF;
+}
+
+QDialog#visualImportDialog QComboBox:focus {
+    border-color: #4EC9FF;
+}
+
+QDialog#visualImportDialog QComboBox::drop-down {
+    border: none;
+    width: 25px;
+}
+
+QDialog#visualImportDialog QComboBox QAbstractItemView {
+    background-color: #2D2D2D;
+    color: #E6E6E6;
+    border: 1px solid #444444;
+    selection-background-color: #0078D4;
+    selection-color: #FFFFFF;
+}
+
+/* 工具栏按钮样式 */
+QDialog#visualImportDialog QPushButton {
+    background-color: #2D2D2D;
+    color: #E6E6E6;
+    border: 1px solid #444444;
+    border-radius: 4px;
+    padding: 5px 10px;
+}
+
+QDialog#visualImportDialog QPushButton:hover {
+    background-color: #3D3D3D;
+    border-color: #555555;
+}
+
+QDialog#visualImportDialog QPushButton:pressed {
+    background-color: #4D4D4D;
+}
+
+/* 右键菜单样式 */
+QDialog#visualImportDialog QMenu {
+    background-color: #2D2D2D;
+    color: #E6E6E6;
+    border: 1px solid #444444;
+    padding: 5px;
+}
+
+QDialog#visualImportDialog QMenu::item {
+    padding: 6px 20px;
+    border-radius: 3px;
+}
+
+QDialog#visualImportDialog QMenu::item:selected {
+    background-color: #0078D4;
+    color: #FFFFFF;
+}
+
+QDialog#visualImportDialog QMenu::separator {
+    height: 1px;
+    background-color: #444444;
+    margin: 5px 0;
+}

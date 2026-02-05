@@ -26,7 +26,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QAction
 
 from ui.fluent_widgets import PushButton, PrimaryPushButton
-from .detail_import_dialog import DetailImportDialog
 from .visual_import_dialog import VisualImportDialog
 from .excel_import_dialog import ExcelFileSelector
 
@@ -794,7 +793,7 @@ class BiddingDetailTab(QWidget):
         self.calculate_total()
 
     def on_import_excel(self):
-        """导入Excel明细 - 使用可视化导入对话框"""
+        """导入Excel明细"""
         if not self.current_bidding_id:
             MessageDialog.warning(self, "提示", "请先选择投标")
             return
@@ -804,22 +803,12 @@ class BiddingDetailTab(QWidget):
             MessageDialog.warning(self, "提示", "请先选择Excel文件")
             return
 
-        # 步骤1: 打开可视化识别对话框，让用户手动标记行类型
+        # 打开可视化导入对话框，传入汇总项名称作为顶级行名称
         summary_name = self.current_summary_item.name if self.current_summary_item else ""
-        visual_dialog = VisualImportDialog(excel_path, self)
-        
-        if visual_dialog.exec() != VisualImportDialog.Accepted:
-            return  # 用户取消了导入
-        
-        # 获取用户标记的行类型信息
-        row_types = visual_dialog.get_row_types()
-        
-        # 步骤2: 打开原导入对话框进行列映射和最终导入
-        # 传入用户标记的行类型，让导入对话框使用这些标记
-        dialog = DetailImportDialog(excel_path, self.current_bidding_name, summary_name, self)
-        dialog.set_row_types(row_types)  # 设置用户标记的行类型
-        
-        if dialog.exec() == DetailImportDialog.Accepted:
+        # 检测当前主题
+        is_dark = self._is_dark_theme()
+        dialog = VisualImportDialog(excel_path, self.current_bidding_name, summary_name, self, is_dark)
+        if dialog.exec() == VisualImportDialog.Accepted:
             imported_data = dialog.get_imported_data()
             if imported_data:
                 self.build_tree_from_imported_data(imported_data)
@@ -1221,6 +1210,30 @@ class BiddingDetailTab(QWidget):
 
         self.total_label.setText(f"¥ {total:,.2f}")
         return total
+
+    def _is_dark_theme(self) -> bool:
+        """检测当前是否为深色主题"""
+        # 获取应用程序的样式表
+        app = QApplication.instance()
+        if app:
+            # 检查主窗口的背景色
+            from PySide6.QtWidgets import QMainWindow
+            main_window = None
+            for widget in app.topLevelWidgets():
+                if isinstance(widget, QMainWindow):
+                    main_window = widget
+                    break
+            
+            if main_window:
+                # 获取背景色
+                palette = main_window.palette()
+                bg_color = palette.color(main_window.backgroundRole())
+                # 如果背景色较暗（RGB平均值 < 128），认为是深色主题
+                brightness = (bg_color.red() + bg_color.green() + bg_color.blue()) / 3
+                return brightness < 128
+        
+        # 默认返回False（浅色主题）
+        return False
 
     def expand_all(self):
         """展开全部"""
