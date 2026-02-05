@@ -46,49 +46,6 @@ class RowType(Enum):
     INVALID = "无效行"   # 其他无效行
 
 
-class CheckBoxDelegate(QStyledItemDelegate):
-    """复选框委托 - 用于表格中的复选框"""
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.checked_rows = set()
-    
-    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index):
-        """绘制复选框"""
-        # 获取当前行的勾选状态
-        row = index.row()
-        checked = row in self.checked_rows
-        
-        # 绘制复选框
-        opt = QStyleOptionViewItem(option)
-        opt.features = QStyleOptionViewItem.HasCheckIndicator
-        opt.state |= QStyle.State_Enabled
-        if checked:
-            opt.state |= QStyle.State_On
-        else:
-            opt.state |= QStyle.State_Off
-        
-        # 居中绘制
-        opt.rect.adjust(opt.rect.width() // 4, 0, -opt.rect.width() // 4, 0)
-        QApplication.style().drawPrimitive(QStyle.PE_IndicatorItemViewItemCheck, opt, painter)
-    
-    def editorEvent(self, event, model, option, index):
-        """处理点击事件"""
-        if event.type() == event.MouseButtonRelease:
-            row = index.row()
-            if row in self.checked_rows:
-                self.checked_rows.discard(row)
-            else:
-                self.checked_rows.add(row)
-            model.dataChanged.emit(index, index)
-            return True
-        return False
-    
-    def sizeHint(self, option, index):
-        """返回大小提示"""
-        return QSize(30, 30)
-
-
 class VisualImportDialog(QDialog):
     """可视化导入对话框"""
     
@@ -149,6 +106,7 @@ class VisualImportDialog(QDialog):
         self.headers = []
         self.preview_rows = []
         self.header_row_index = 0
+        self.header_row_count = 1  # 表头行数（支持多行表头）
         self.load_worker = None
         self.current_sheet_name = None
         self.drag_pos = None
@@ -161,6 +119,9 @@ class VisualImportDialog(QDialog):
         self.row_types = {}  # row_index -> RowType
         self.checked_rows = set()  # 被选中的行
         self.column_mappings = {}  # field_key -> col_index
+        
+        # 列识别完成标志
+        self.column_detection_done = False
         
         # 设置无边框窗口
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
@@ -218,6 +179,7 @@ class VisualImportDialog(QDialog):
         
         # ========== 顶部信息区域 ==========
         info_widget = QWidget()
+        info_widget.setObjectName("infoWidget")
         info_layout = QHBoxLayout(info_widget)
         info_layout.setContentsMargins(20, 5, 20, 5)
         info_layout.setSpacing(15)
@@ -230,12 +192,14 @@ class VisualImportDialog(QDialog):
         # 工作簿选择
         info_layout.addWidget(QLabel("工作簿:"))
         self.sheet_combo = QComboBox()
+        self.sheet_combo.setObjectName("sheetCombo")
         self.sheet_combo.setMinimumWidth(150)
         self.sheet_combo.currentIndexChanged.connect(self.on_sheet_changed)
         info_layout.addWidget(self.sheet_combo)
         
         # 进度条
         self.progress_bar = QProgressBar()
+        self.progress_bar.setObjectName("progressBar")
         self.progress_bar.setMaximumWidth(100)
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setTextVisible(False)
@@ -243,101 +207,36 @@ class VisualImportDialog(QDialog):
         info_layout.addWidget(self.progress_bar)
         
         self.status_label = QLabel("")
+        self.status_label.setObjectName("statusLabel")
         info_layout.addWidget(self.status_label)
         
         info_layout.addStretch()
         
-        # 自动识别按钮
-        auto_btn = PushButton("🔍 自动识别")
-        auto_btn.setToolTip("自动识别行类型和列映射")
-        auto_btn.setFixedSize(100, 32)
-        auto_btn.clicked.connect(self.auto_detect_all)
-        info_layout.addWidget(auto_btn)
+        # 自动识别列按钮
+        self.auto_detect_col_btn = PushButton("🔍 自动识别列")
+        self.auto_detect_col_btn.setObjectName("autoDetectColButton")
+        self.auto_detect_col_btn.setToolTip("自动识别表头列映射（支持多行表头）")
+        self.auto_detect_col_btn.setFixedSize(120, 32)
+        self.auto_detect_col_btn.clicked.connect(self.auto_detect_columns)
+        info_layout.addWidget(self.auto_detect_col_btn)
+        
+        # 自动识别行按钮（初始禁用）
+        self.auto_detect_row_btn = PushButton("🔍 自动识别行")
+        self.auto_detect_row_btn.setObjectName("autoDetectRowButton")
+        self.auto_detect_row_btn.setToolTip("先识别列后才能识别行")
+        self.auto_detect_row_btn.setFixedSize(120, 32)
+        self.auto_detect_row_btn.setEnabled(False)
+        self.auto_detect_row_btn.clicked.connect(self.auto_detect_rows)
+        info_layout.addWidget(self.auto_detect_row_btn)
         
         # 清除按钮
         clear_btn = PushButton("🗑️ 清除")
+        clear_btn.setObjectName("clearButton")
         clear_btn.setFixedSize(80, 32)
         clear_btn.clicked.connect(self.clear_all)
         info_layout.addWidget(clear_btn)
         
         layout.addWidget(info_widget)
-        
-        # ========== 工具栏 ==========
-        toolbar = QFrame()
-        toolbar.setObjectName("toolbarFrame")
-        toolbar_layout = QHBoxLayout(toolbar)
-        toolbar_layout.setContentsMargins(20, 5, 20, 5)
-        toolbar_layout.setSpacing(10)
-        
-        toolbar_layout.addWidget(QLabel("📝 行类型标记:"))
-        
-        # 行类型按钮
-        row_types = [
-            ("表头", RowType.HEADER, "#FFE4E1"),
-            ("表尾", RowType.FOOTER, "#FFE4E1"),
-            ("无效", RowType.INVALID, "#F5F5F5"),
-            ("分部1", RowType.DIVISION_1, "#E6F3FF"),
-            ("分部2", RowType.DIVISION_2, "#E6F3FF"),
-            ("分部3", RowType.DIVISION_3, "#E6F3FF"),
-            ("分部4", RowType.DIVISION_4, "#E6F3FF"),
-            ("分部5", RowType.DIVISION_5, "#E6F3FF"),
-            ("清单", RowType.ITEM, "#F0FFF0"),
-            ("合并", RowType.MERGE, "#FFF8DC"),
-        ]
-        
-        for label, row_type, color in row_types:
-            btn = QPushButton(label)
-            btn.setFixedSize(55, 28)
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {color};
-                    border: 1px solid #ccc;
-                    border-radius: 3px;
-                    font-size: 11px;
-                }}
-                QPushButton:hover {{
-                    border: 1px solid #666;
-                }}
-            """)
-            btn.clicked.connect(lambda checked, rt=row_type: self.mark_selected_rows(rt))
-            toolbar_layout.addWidget(btn)
-        
-        toolbar_layout.addStretch()
-        
-        # 全选/反选按钮
-        select_all_btn = PushButton("☑️ 全选")
-        select_all_btn.setFixedSize(70, 28)
-        select_all_btn.clicked.connect(self.select_all_rows)
-        toolbar_layout.addWidget(select_all_btn)
-        
-        invert_btn = PushButton("🔃 反选")
-        invert_btn.setFixedSize(70, 28)
-        invert_btn.clicked.connect(self.invert_selection)
-        toolbar_layout.addWidget(invert_btn)
-        
-        layout.addWidget(toolbar)
-        
-        # ========== 列映射设置区域 ==========
-        mapping_frame = QFrame()
-        mapping_frame.setObjectName("mappingFrame")
-        mapping_layout = QHBoxLayout(mapping_frame)
-        mapping_layout.setContentsMargins(20, 5, 20, 5)
-        mapping_layout.setSpacing(10)
-        
-        mapping_layout.addWidget(QLabel("📋 列映射:"))
-        
-        # 创建列映射下拉框
-        self.mapping_combos = {}
-        for field_key, field_name, is_required, _ in self.FIELD_DEFINITIONS[:8]:  # 只显示前8个重要字段
-            combo = QComboBox()
-            combo.setMinimumWidth(100)
-            combo.addItem(f"--{field_name}--", None)
-            combo.currentIndexChanged.connect(lambda idx, fk=field_key: self.on_column_mapping_changed(fk, idx))
-            self.mapping_combos[field_key] = combo
-            mapping_layout.addWidget(combo)
-        
-        mapping_layout.addStretch()
-        layout.addWidget(mapping_frame)
         
         # ========== 数据预览表格 ==========
         self.preview_table = QTableWidget()
@@ -368,6 +267,7 @@ class VisualImportDialog(QDialog):
         btn_layout.addSpacing(20)
         
         self.import_btn = PrimaryPushButton("确认导入")
+        self.import_btn.setObjectName("primaryButton")
         self.import_btn.setFixedSize(100, 35)
         self.import_btn.clicked.connect(self.on_import)
         btn_layout.addWidget(self.import_btn)
@@ -427,15 +327,14 @@ class VisualImportDialog(QDialog):
         # 初始化行类型
         self.row_types = {i: RowType.UNKNOWN for i in range(len(preview_rows))}
         self.checked_rows = set()
+        self.column_detection_done = False
+        self.auto_detect_row_btn.setEnabled(False)
         
         # 更新预览表格
         self.update_preview_table()
         
-        # 更新列映射下拉框
-        self.update_mapping_combos()
-        
         self.progress_bar.hide()
-        self.status_label.setText(f"✓ 已加载 {len(preview_rows)} 行数据")
+        self.status_label.setText(f"✓ 已加载 {len(preview_rows)} 行数据，请先点击"自动识别列"")
         self.import_btn.setEnabled(True)
         
         if self.load_worker:
@@ -468,6 +367,7 @@ class VisualImportDialog(QDialog):
         # 第0行：列映射设置行
         for col_idx in range(max_cols):
             combo = QComboBox()
+            combo.setObjectName(f"mappingCombo_{col_idx}")
             combo.addItem("--未识别--", None)
             combo.addItem("序号", "sequence")
             combo.addItem("项目名称", "name")
@@ -529,28 +429,6 @@ class VisualImportDialog(QDialog):
                 item.setBackground(QBrush(QColor(style['bg'])))
                 item.setForeground(QBrush(QColor(style['fg'])))
     
-    def update_mapping_combos(self):
-        """更新列映射下拉框"""
-        if not self.preview_rows:
-            return
-        
-        max_cols = max(len(row) for row in self.preview_rows)
-        
-        for combo in self.mapping_combos.values():
-            combo.clear()
-            combo.addItem("--请选择--", None)
-            for col_idx in range(max_cols):
-                col_letter = self._get_column_letter(col_idx)
-                combo.addItem(f"列{col_letter}", col_idx)
-    
-    def _get_column_letter(self, n: int) -> str:
-        """将列索引转换为Excel列字母"""
-        result = ""
-        while n >= 0:
-            result = chr(n % 26 + ord('A')) + result
-            n = n // 26 - 1
-        return result if result else "A"
-    
     def on_header_mapping_changed(self, col_idx: int, index: int):
         """列映射设置改变"""
         combo = self.preview_table.cellWidget(0, 3 + col_idx)
@@ -559,32 +437,37 @@ class VisualImportDialog(QDialog):
             if field_key:
                 self.column_mappings[field_key] = col_idx
     
-    def on_column_mapping_changed(self, field_key: str, index: int):
-        """顶部列映射改变"""
-        combo = self.mapping_combos[field_key]
-        col_idx = combo.currentData()
-        if col_idx is not None:
-            self.column_mappings[field_key] = col_idx
-    
-    def auto_detect_all(self):
-        """自动识别所有内容"""
+    def auto_detect_columns(self):
+        """自动识别列映射 - 支持多行表头"""
         if not self.preview_rows:
             return
         
-        # 1. 自动识别表头行
-        header_row = self._detect_header_row()
-        if header_row is not None:
-            self.row_types[header_row] = RowType.HEADER
-            # 自动识别列映射
-            self._auto_detect_column_mappings(header_row)
+        # 1. 检测表头行
+        header_row_idx = self._detect_header_row()
+        if header_row_idx is None:
+            self.status_label.setText("✗ 未能识别表头行，请手动设置")
+            return
         
-        # 2. 自动识别行类型
-        self._auto_detect_row_types()
+        # 2. 检测多行表头
+        self._detect_multi_row_headers(header_row_idx)
         
-        # 3. 更新表格显示
+        # 3. 更新列映射
+        self._update_column_mappings_from_header()
+        
+        # 4. 标记表头行为无效行
+        for i in range(header_row_idx, header_row_idx + self.header_row_count):
+            if i < len(self.preview_rows):
+                self.row_types[i] = RowType.INVALID
+        
+        # 5. 更新表格显示
         self.update_preview_table()
         
-        self.status_label.setText(f"✓ 自动识别完成")
+        # 6. 启用行识别按钮
+        self.column_detection_done = True
+        self.auto_detect_row_btn.setEnabled(True)
+        self.auto_detect_row_btn.setToolTip("自动识别行类型（分部、清单、合并行）")
+        
+        self.status_label.setText(f"✓ 列识别完成，识别出{self.header_row_count}行表头，现在可以识别行")
     
     def _detect_header_row(self) -> Optional[int]:
         """自动识别表头行"""
@@ -613,18 +496,50 @@ class VisualImportDialog(QDialog):
         
         return best_row_idx
     
-    def _auto_detect_column_mappings(self, header_row: int):
-        """自动识别列映射"""
-        if header_row >= len(self.preview_rows):
+    def _detect_multi_row_headers(self, header_row_idx: int):
+        """检测多行表头"""
+        if header_row_idx >= len(self.preview_rows):
+            self.header_row_count = 1
             return
         
-        header_row_data = self.preview_rows[header_row]
+        # 尝试合并后续2-3行作为完整表头
+        rows_to_merge = [self.preview_rows[header_row_idx]]
+        for i in range(1, 3):  # 最多合并后续2行
+            if header_row_idx + i < len(self.preview_rows):
+                next_row = self.preview_rows[header_row_idx + i]
+                # 如果下一行有非空单元格，可能是多行表头的一部分
+                if any(cell and str(cell).strip() for cell in next_row):
+                    rows_to_merge.append(next_row)
+                else:
+                    break
         
+        # 合并多行表头
+        max_cols = max(len(row) for row in rows_to_merge)
+        merged_headers = []
+        for col_idx in range(max_cols):
+            header_parts = []
+            for row in rows_to_merge:
+                if col_idx < len(row) and row[col_idx]:
+                    cell_val = str(row[col_idx]).strip()
+                    if cell_val and cell_val not in header_parts:
+                        header_parts.append(cell_val)
+            
+            if header_parts:
+                merged_headers.append(''.join(header_parts))
+            else:
+                merged_headers.append('')
+        
+        self.headers = merged_headers
+        self.header_row_index = header_row_idx
+        self.header_row_count = len(rows_to_merge)
+    
+    def _update_column_mappings_from_header(self):
+        """根据识别的表头更新列映射"""
         for field_key, field_name, is_required, keywords in self.FIELD_DEFINITIONS:
             best_col = None
             best_score = 0.0
             
-            for col_idx, header in enumerate(header_row_data):
+            for col_idx, header in enumerate(self.headers):
                 header_text = str(header).lower()
                 for keyword in keywords:
                     keyword_lower = keyword.lower()
@@ -636,24 +551,32 @@ class VisualImportDialog(QDialog):
             
             if best_col is not None and best_score > 0.3:
                 self.column_mappings[field_key] = best_col
-                # 更新顶部下拉框
-                if field_key in self.mapping_combos:
-                    combo = self.mapping_combos[field_key]
+                # 更新表格中的下拉框
+                combo = self.preview_table.cellWidget(0, 3 + best_col)
+                if combo:
                     for i in range(combo.count()):
-                        if combo.itemData(i) == best_col:
+                        if combo.itemData(i) == field_key:
                             combo.setCurrentIndex(i)
                             break
     
-    def _auto_detect_row_types(self):
+    def auto_detect_rows(self):
         """自动识别行类型"""
+        if not self.column_detection_done:
+            MessageDialog.warning(self, "提示", "请先点击"自动识别列"按钮")
+            return
+        
+        if not self.preview_rows:
+            return
+        
         name_col = self.column_mappings.get('name')
         unit_col = self.column_mappings.get('unit')
         quantity_col = self.column_mappings.get('quantity')
         
-        for row_idx, row_data in enumerate(self.preview_rows):
-            # 跳过表头行
-            if self.row_types.get(row_idx) == RowType.HEADER:
-                continue
+        # 从表头之后开始识别
+        start_row = self.header_row_index + self.header_row_count
+        
+        for row_idx in range(start_row, len(self.preview_rows)):
+            row_data = self.preview_rows[row_idx]
             
             # 获取关键列的值
             name_val = str(row_data[name_col]).strip() if name_col and name_col < len(row_data) else ""
@@ -665,18 +588,86 @@ class VisualImportDialog(QDialog):
                 # 空行 - 无效
                 self.row_types[row_idx] = RowType.INVALID
             elif unit_val and quantity_val:
-                # 有单位、有工程量 - 清单行
+                # 有单位、有工程量 - 清单行，需要勾选
                 self.row_types[row_idx] = RowType.ITEM
+                self.checked_rows.add(row_idx)
             elif name_val and not unit_val and not quantity_val:
-                # 只有项目名称 - 可能是分部行
+                # 只有项目名称 - 分部行，需要勾选
                 # 检查是否是中文数字开头
                 chinese_nums = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
                 if any(name_val.startswith(c) for c in chinese_nums):
                     self.row_types[row_idx] = RowType.DIVISION_1
                 else:
                     self.row_types[row_idx] = RowType.DIVISION_2
+                self.checked_rows.add(row_idx)
             else:
-                self.row_types[row_idx] = RowType.UNKNOWN
+                # 检查是否是合并行（在清单行之后，有描述内容但没有单位工程量）
+                self.row_types[row_idx] = RowType.INVALID
+        
+        # 检测合并行（在清单行之后，有特征描述内容）
+        self._detect_merge_rows(start_row)
+        
+        # 检测表尾（从后往前找，通常是汇总信息）
+        self._detect_footer_rows()
+        
+        # 更新表格显示
+        self.update_preview_table()
+        
+        # 勾选需要导入的行
+        self._update_checked_rows()
+        
+        valid_count = len([t for t in self.row_types.values() if t in [RowType.ITEM, RowType.DIVISION_1, RowType.DIVISION_2, RowType.DIVISION_3, RowType.DIVISION_4, RowType.DIVISION_5, RowType.MERGE]])
+        self.status_label.setText(f"✓ 行识别完成，识别出 {valid_count} 行有效数据（已自动勾选）")
+    
+    def _detect_merge_rows(self, start_row: int):
+        """检测合并行"""
+        name_col = self.column_mappings.get('name')
+        desc_col = self.column_mappings.get('description')
+        
+        if name_col is None:
+            return
+        
+        prev_item_row = None
+        for row_idx in range(start_row, len(self.preview_rows)):
+            if self.row_types.get(row_idx) == RowType.ITEM:
+                prev_item_row = row_idx
+            elif prev_item_row is not None and self.row_types.get(row_idx) == RowType.INVALID:
+                row_data = self.preview_rows[row_idx]
+                name_val = str(row_data[name_col]).strip() if name_col < len(row_data) else ""
+                desc_val = str(row_data[desc_col]).strip() if desc_col and desc_col < len(row_data) else ""
+                
+                # 如果有描述内容但没有单位工程量，可能是合并行
+                if desc_val and not name_val:
+                    self.row_types[row_idx] = RowType.MERGE
+                    self.checked_rows.add(row_idx)
+    
+    def _detect_footer_rows(self):
+        """检测表尾行"""
+        # 从后往前找，通常是包含"合计"、"总计"等关键词的行
+        footer_keywords = ['合计', '总计', '汇总', '小计', '共']
+        
+        for row_idx in range(len(self.preview_rows) - 1, -1, -1):
+            if self.row_types.get(row_idx) != RowType.UNKNOWN:
+                continue
+            
+            row_data = self.preview_rows[row_idx]
+            row_text = ' '.join(str(cell).lower() for cell in row_data if cell)
+            
+            for keyword in footer_keywords:
+                if keyword in row_text:
+                    self.row_types[row_idx] = RowType.INVALID
+                    break
+    
+    def _update_checked_rows(self):
+        """更新勾选状态到表格"""
+        for table_row in range(1, self.preview_table.rowCount()):
+            data_row = table_row - 1
+            checkbox_item = self.preview_table.item(table_row, 0)
+            if checkbox_item:
+                if data_row in self.checked_rows:
+                    checkbox_item.setCheckState(Qt.Checked)
+                else:
+                    checkbox_item.setCheckState(Qt.Unchecked)
     
     def mark_selected_rows(self, row_type: RowType):
         """标记选中的行为指定类型"""
@@ -731,12 +722,16 @@ class VisualImportDialog(QDialog):
         self.row_types = {i: RowType.UNKNOWN for i in range(len(self.preview_rows))}
         self.checked_rows = set()
         self.column_mappings = {}
+        self.column_detection_done = False
+        self.auto_detect_row_btn.setEnabled(False)
+        self.auto_detect_row_btn.setToolTip("先识别列后才能识别行")
         self.update_preview_table()
-        self.status_label.setText("✓ 已清除所有标记")
+        self.status_label.setText("✓ 已清除所有标记，请重新识别")
     
     def show_context_menu(self, position):
         """显示右键菜单"""
         menu = QMenu(self)
+        menu.setObjectName("contextMenu")
         
         # 行类型子菜单
         row_type_menu = menu.addMenu("标记为")
@@ -757,6 +752,15 @@ class VisualImportDialog(QDialog):
         for label, row_type in row_types:
             action = row_type_menu.addAction(label)
             action.triggered.connect(lambda checked, rt=row_type: self.mark_selected_rows(rt))
+        
+        menu.addSeparator()
+        
+        # 全选/反选
+        select_all_action = menu.addAction("☑️ 全选")
+        select_all_action.triggered.connect(self.select_all_rows)
+        
+        invert_action = menu.addAction("🔃 反选")
+        invert_action.triggered.connect(self.invert_selection)
         
         menu.exec_(self.preview_table.viewport().mapToGlobal(position))
     
