@@ -848,43 +848,51 @@ class DetailImportDialog(QDialog):
     
     def _is_header_row(self, row: tuple, mapping: Dict[str, int]) -> bool:
         """
-        智能检测是否为表头行
+        智能检测是否为表头行或需要跳过的行
         
         检测策略：
-        1. 检查项目名称列是否包含表头关键词
-        2. 检查项目特征描述列是否包含表头关键词
-        3. 检查整行是否为典型的表头格式（如"分部分项工程"、"项目特征描述"等）
-        4. 检查是否为"本页小计"、"合计"等汇总行
+        1. 检查是否为重复的表头行（"分部分项工程和单价措施项目清单与计价表"、"工程名称"等）
+        2. 检查是否为表头列名行（"序号|项目编码|项目名称|..."）
+        3. 检查是否为"本页小计"、"合计"等汇总行
+        4. 检查是否为空行
         """
-        # 表头关键词列表
-        header_keywords = [
-            '分部分项工程', '项目名称', '项目特征', '描述',
-            '序号', '编号', '单位', '数量', '单价', '合价',
-            '清单', '明细', '表', '工程名称'
+        # 表头标题行关键词（整行匹配）
+        header_title_patterns = [
+            '分部分项工程和单价措施项目清单与计价表',
+            '分部分项工程',
+            '工程名称：',
+            '标段：',
         ]
         
+        # 表头列名行关键词（多列联合判断）
+        header_column_keywords = ['序号', '项目编码', '项目名称', '项目特征', '计量单位', '工程量', '综合单价', '合价']
+        
         # 汇总行关键词（需要跳过）
-        summary_keywords = ['本页小计', '合计', '总计', '小计', '共', '页']
+        summary_keywords = ['本页小计', '合计', '总计', '小计', '共', '页', '表—']
         
         # 获取关键列的索引
         name_col = mapping.get('name')
         desc_col = mapping.get('description')
         sequence_col = mapping.get('sequence')
+        code_col = mapping.get('code')  # 项目编码列
         
         # 检查项目名称列
         if name_col is not None and name_col < len(row):
             name_val = str(row[name_col]).strip() if row[name_col] else ""
-            name_lower = name_val.lower()
             
             # 检查是否为汇总行
             for keyword in summary_keywords:
                 if keyword in name_val:
                     return True
             
-            # 检查是否包含表头关键词
-            for keyword in header_keywords:
-                if keyword in name_val and len(name_val) < 20:
+            # 检查是否为表头标题行
+            for pattern in header_title_patterns:
+                if pattern in name_val:
                     return True
+            
+            # 检查是否为表头列名行（项目名称列包含"项目名称"且长度较短）
+            if '项目名称' in name_val and len(name_val) < 15:
+                return True
         
         # 检查项目特征描述列
         if desc_col is not None and desc_col < len(row):
@@ -895,34 +903,81 @@ class DetailImportDialog(QDialog):
                 if keyword in desc_val:
                     return True
             
-            # 检查是否包含表头关键词
-            for keyword in header_keywords:
-                if keyword in desc_val and len(desc_val) < 20:
-                    return True
+            # 检查是否为表头列名行
+            if '项目特征描述' in desc_val and len(desc_val) < 15:
+                return True
         
-        # 检查序号列 - 如果序号列包含非数字内容，可能是表头
+        # 检查整行是否为表头列名行（多列联合判断）
+        # 如果序号列、项目编码列、项目名称列同时包含表头关键词，则认为是表头行
+        header_col_count = 0
+        for col_idx in [sequence_col, code_col, name_col, desc_col]:
+            if col_idx is not None and col_idx < len(row):
+                cell_val = str(row[col_idx]).strip() if row[col_idx] else ""
+                for keyword in header_column_keywords:
+                    if keyword in cell_val:
+                        header_col_count += 1
+                        break
+        
+        # 如果超过2个关键列包含表头关键词，认为是表头行
+        if header_col_count >= 2:
+            return True
+        
+        # 检查序号列 - 如果序号列包含表头关键词
         if sequence_col is not None and sequence_col < len(row):
             seq_val = str(row[sequence_col]).strip() if row[sequence_col] else ""
-            if seq_val:
-                # 如果序号不是纯数字或标准序号格式，可能是表头
-                if not re.match(r'^[\d\.\-]+$', seq_val) and len(seq_val) < 10:
-                    # 检查是否包含表头关键词
-                    for keyword in header_keywords:
-                        if keyword in seq_val:
-                            return True
+            if seq_val == '序号' or '序号' in seq_val:
+                return True
+        
+        return False
+    
+    def _is_division_row(self, row: tuple, mapping: Dict[str, int]) -> bool:
+        """
+        检测是否为分部行（如"土石方工程"、"混凝土工程"）
+        
+        特征：
+        1. 项目名称列有值
+        2. 序号列为空
+        3. 项目编码列为空
+        4. 项目特征描述列为空或很短
+        """
+        name_col = mapping.get('name')
+        sequence_col = mapping.get('sequence')
+        code_col = mapping.get('code')
+        desc_col = mapping.get('description')
+        
+        if name_col is None or name_col >= len(row):
+            return False
+        
+        name_val = str(row[name_col]).strip() if row[name_col] else ""
+        if not name_val:
+            return False
+        
+        # 检查是否为工程类分部名称
+        division_keywords = ['工程', '分部', '分项', '措施项目']
+        is_division = any(keyword in name_val for keyword in division_keywords)
+        
+        # 检查其他列是否为空
+        seq_val = str(row[sequence_col]).strip() if sequence_col is not None and sequence_col < len(row) and row[sequence_col] else ""
+        code_val = str(row[code_col]).strip() if code_col is not None and code_col < len(row) and row[code_col] else ""
+        
+        # 分部行的特征：有项目名称，但无序号和项目编码
+        if is_division and not seq_val and not code_val:
+            return True
         
         return False
     
     def _should_merge_with_previous(self, current_row: tuple, previous_item: Dict, 
                                      mapping: Dict[str, int]) -> bool:
         """
-        判断当前行是否应该与前一行合并
+        判断当前行是否应该与前一行合并 - 增强版
         
         合并策略：
-        1. 当前行项目名称异常短（可能是被截断的）
-        2. 前一行项目名称异常短（可能是不完整的）
-        3. 当前行没有序号或序号格式异常
-        4. 前一行有项目特征描述但当前行也有项目特征描述（可能是延续）
+        1. 当前行没有序号，但有项目名称（可能是前一行的延续）
+        2. 当前行项目名称异常短（少于3个字符），可能是被截断的
+        3. 前一行项目名称以不完整的方式结束（如"混凝"而不是"混凝土"）
+        4. 前一行项目特征描述以不完整的方式结束
+        5. 当前行项目名称看起来像前一行的延续（以"土"、"送"等结尾词开头）
+        6. 当前行项目特征描述看起来像前一行描述的延续
         """
         if not previous_item:
             return False
@@ -930,35 +985,67 @@ class DetailImportDialog(QDialog):
         name_col = mapping.get('name')
         desc_col = mapping.get('description')
         sequence_col = mapping.get('sequence')
+        code_col = mapping.get('code')  # 项目编码列
         
         # 获取当前行的值
         current_name = str(current_row[name_col]).strip() if name_col is not None and name_col < len(current_row) and current_row[name_col] else ""
         current_desc = str(current_row[desc_col]).strip() if desc_col is not None and desc_col < len(current_row) and current_row[desc_col] else ""
         current_seq = str(current_row[sequence_col]).strip() if sequence_col is not None and sequence_col < len(current_row) and current_row[sequence_col] else ""
+        current_code = str(current_row[code_col]).strip() if code_col is not None and code_col < len(current_row) and current_row[code_col] else ""
         
         # 获取前一行的值
         prev_name = str(previous_item.get('name', '')).strip()
         prev_desc = str(previous_item.get('description', '')).strip()
         prev_seq = str(previous_item.get('sequence', '')).strip()
         
-        # 如果当前行没有序号，可能是前一行的延续
-        if not current_seq and current_name:
+        # 如果当前行有项目编码，说明是新的一条记录，不合并
+        if current_code and re.match(r'^\d{9,}$', current_code.replace('-', '')):
+            return False
+        
+        # 如果当前行有序号且是数字格式，说明是新的一条记录，不合并
+        if current_seq and re.match(r'^\d+$', current_seq):
+            return False
+        
+        # 如果当前行没有序号，但有项目名称，可能是前一行的延续
+        if not current_seq and current_name and not current_code:
             return True
         
         # 如果当前行项目名称非常短（少于3个字符），可能是被截断的
         if len(current_name) < 3 and len(prev_name) > 0:
             return True
         
-        # 如果前一行项目名称以不完整的方式结束（如"混凝"而不是"混凝土"）
-        incomplete_endings = ['混凝', '预拌', '泵送', '强度', '等级', '基础', '独立', '类型']
-        for ending in incomplete_endings:
-            if prev_name.endswith(ending) or prev_desc.endswith(ending):
+        # 如果前一行项目名称以不完整的方式结束
+        incomplete_endings_name = ['混凝', '预拌', '泵送', '强度', '等级', '基础', '独立', '类型', '种类', '形式']
+        for ending in incomplete_endings_name:
+            if prev_name.endswith(ending):
                 return True
         
-        # 如果当前行项目名称看起来像前一行的延续（以"土"、"送"等结尾词开头）
-        continuation_starts = ['土', '送', '级', '凝', '础']
+        # 如果前一行项目特征描述以不完整的方式结束
+        incomplete_endings_desc = ['混凝', '预拌', '泵送', '强度等级:', '基础类型:', '混凝土种类:', '种类:', '等级:', '类型:']
+        for ending in incomplete_endings_desc:
+            if prev_desc.endswith(ending):
+                return True
+        
+        # 如果当前行项目名称看起来像前一行的延续
+        continuation_starts = ['土', '送', '级', '凝', '础', '类', '型']
         if current_name and current_name[0] in continuation_starts:
-            return True
+            # 进一步检查：当前行内容应该能补全前一行的结尾
+            for ending in ['混凝', '预拌', '种类:', '类型:', '等级:']:
+                if prev_name.endswith(ending) or prev_desc.endswith(ending):
+                    return True
+        
+        # 如果当前行项目特征描述看起来像前一行描述的延续
+        if current_desc and prev_desc:
+            # 检查描述是否有明显的延续特征（如以"土"开头补充"混凝"）
+            desc_continuations = [
+                ('混凝', '土'),  # 混凝土
+                ('预拌', '混凝'),  # 预拌混凝土
+                ('种类:', '预拌'),  # 种类:预拌混凝土
+                ('等级:', 'C'),  # 等级:C30
+            ]
+            for prev_ending, curr_start in desc_continuations:
+                if prev_desc.endswith(prev_ending) and current_desc.startswith(curr_start):
+                    return True
         
         return False
     
@@ -1179,6 +1266,8 @@ class DetailImportDialog(QDialog):
             error_count = 0
             first_row_name = None  # 存储第一行（顶级）的名称
             pending_item = None  # 待合并的临时项
+            current_division = None  # 当前分部名称
+            division_stack = []  # 分部层级栈
             
             for row_idx, row in enumerate(sheet.iter_rows(min_row=start_row, values_only=True), start=1):
                 # 检查是否取消
@@ -1193,6 +1282,43 @@ class DetailImportDialog(QDialog):
                             imported_items.append(pending_item)
                             progress_dialog.imported_count += 1
                             pending_item = None
+                        continue
+                    
+                    # 检测是否为分部行
+                    if self._is_division_row(row, mapping):
+                        name_col = mapping.get('name')
+                        if name_col is not None and name_col < len(row) and row[name_col]:
+                            division_name = str(row[name_col]).strip()
+                            # 保存当前分部名称
+                            current_division = division_name
+                            # 创建分部项
+                            division_item = {
+                                'sequence': '',
+                                'name': division_name,
+                                'specification': '',
+                                'description': '',
+                                'unit': '',
+                                'quantity': 0.0,
+                                'unit_price': 0.0,
+                                'labor_unit_price': 0.0,
+                                'material_unit_price': 0.0,
+                                'material_loss_rate': 0.0,
+                                'auxiliary_unit_price': 0.0,
+                                'machine_unit_price': 0.0,
+                                'other_unit_price': 0.0,
+                                'total_price': 0.0,
+                                'level': 2,  # 分部层级为2（顶级为1）
+                                'remark': '',
+                                'is_division': True  # 标记为分部行
+                            }
+                            # 保存前一行（如果有）
+                            if pending_item:
+                                imported_items.append(pending_item)
+                                progress_dialog.imported_count += 1
+                                pending_item = None
+                            # 添加分部行
+                            imported_items.append(division_item)
+                            progress_dialog.imported_count += 1
                         continue
                     
                     # 提取当前行数据
@@ -1240,9 +1366,19 @@ class DetailImportDialog(QDialog):
                     # 计算层级
                     sequence = str(item_data.get('sequence', ''))
                     if sequence and sequence.strip():
-                        item_data['level'] = self.parse_sequence_level(sequence)
+                        base_level = self.parse_sequence_level(sequence)
+                        # 如果有当前分部，则层级加2（顶级1 + 分部2）
+                        if current_division:
+                            item_data['level'] = base_level + 2
+                        else:
+                            item_data['level'] = base_level + 1
                     else:
-                        item_data['level'] = 1
+                        # 如果没有序号，但有项目编码，视为明细项
+                        code = str(item_data.get('code', '')).strip()
+                        if code and re.match(r'^\d{9,}$', code.replace('-', '')):
+                            item_data['level'] = 3 if current_division else 2
+                        else:
+                            item_data['level'] = 1
                     
                     # 检查是否需要与前一行合并
                     if pending_item and self._should_merge_with_previous(row, pending_item, mapping):
