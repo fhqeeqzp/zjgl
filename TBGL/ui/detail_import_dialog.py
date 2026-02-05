@@ -847,7 +847,7 @@ class DetailImportDialog(QDialog):
         return dots + 2
     
     def import_data_with_progress(self, progress_dialog: ImportProgressDialog) -> List[Dict]:
-        """导入数据（带进度显示）"""
+        """导入数据（带进度显示）- 支持跨行数据合并"""
         if not self.current_sheet_name or not self.excel_path:
             return []
 
@@ -874,14 +874,17 @@ class DetailImportDialog(QDialog):
             error_count = 0
             first_row_name = None  # 存储第一行（顶级）的名称
             
+            # 用于存储跨行合并的数据
+            pending_item = None  # 待处理的行数据（可能还有后续行需要合并）
+            
             for row_idx, row in enumerate(sheet.iter_rows(min_row=start_row, values_only=True), start=1):
                 # 检查是否取消
                 if progress_dialog.is_cancelled:
                     break
                 
-                item_data = {}
-                
                 try:
+                    # 提取当前行的数据
+                    row_data = {}
                     for field_key, col_idx in mapping.items():
                         if col_idx < len(row):
                             value = row[col_idx]
@@ -899,7 +902,7 @@ class DetailImportDialog(QDialog):
                             else:
                                 value = str(value).strip() if value is not None else ""
 
-                            item_data[field_key] = value
+                            row_data[field_key] = value
                         else:
                             # 数值字段默认值
                             numeric_fields = ['quantity', 'unit_price', 'labor_unit_price',
@@ -907,30 +910,88 @@ class DetailImportDialog(QDialog):
                                             'auxiliary_unit_price',
                                             'machine_unit_price', 'other_unit_price']
                             if field_key in numeric_fields:
-                                item_data[field_key] = 0.0
+                                row_data[field_key] = 0.0
                             else:
-                                item_data[field_key] = ""
+                                row_data[field_key] = ""
 
-                    # 获取分部分项工程名称
-                    name = str(item_data.get('name', '')).strip()
+                    # 获取序号和名称
+                    sequence = str(row_data.get('sequence', '')).strip()
+                    name = str(row_data.get('name', '')).strip()
+                    description = str(row_data.get('description', '')).strip()
                     
-                    # 过滤空行（分部分项工程名称为空的行）
-                    if not name:
-                        continue
+                    # 判断这是否是一个新记录还是上一行的延续
+                    # 如果序号为空，且名称不为空，说明是上一行的延续（项目名称或描述被分行了）
+                    is_continuation = not sequence and name and pending_item is not None
                     
-                    # 存储第一行（顶级）的名称
-                    if first_row_name is None:
-                        first_row_name = name
-                    
-                    # 计算层级
-                    sequence = str(item_data.get('sequence', ''))
-                    if sequence and sequence.strip():
-                        item_data['level'] = self.parse_sequence_level(sequence)
+                    if is_continuation:
+                        # 合并数据到上一行
+                        # 合并项目名称
+                        if name:
+                            pending_name = str(pending_item.get('name', '')).strip()
+                            if pending_name:
+                                pending_item['name'] = pending_name + name
+                            else:
+                                pending_item['name'] = name
+                        
+                        # 合并项目特征描述
+                        if description:
+                            pending_desc = str(pending_item.get('description', '')).strip()
+                            if pending_desc:
+                                pending_item['description'] = pending_desc + description
+                            else:
+                                pending_item['description'] = description
+                        
+                        # 其他文本字段也进行合并
+                        for field_key in ['specification', 'unit', 'remark']:
+                            if field_key in row_data and row_data[field_key]:
+                                pending_value = str(pending_item.get(field_key, '')).strip()
+                                if pending_value:
+                                    pending_item[field_key] = pending_value + str(row_data[field_key])
+                                else:
+                                    pending_item[field_key] = row_data[field_key]
+                        
+                        # 数值字段：如果当前行有值且不为0，则使用当前行的值
+                        for field_key in ['quantity', 'unit_price', 'labor_unit_price',
+                                        'material_unit_price', 'material_loss_rate',
+                                        'auxiliary_unit_price', 'machine_unit_price', 'other_unit_price']:
+                            if field_key in row_data and row_data[field_key]:
+                                try:
+                                    val = float(row_data[field_key])
+                                    if val != 0:
+                                        pending_item[field_key] = val
+                                except:
+                                    pass
+                        
                     else:
-                        item_data['level'] = 1
-
-                    imported_items.append(item_data)
-                    progress_dialog.imported_count += 1
+                        # 这是一个新记录
+                        # 先保存之前的待处理项
+                        if pending_item is not None:
+                            # 清理数据
+                            pending_item['name'] = str(pending_item.get('name', '')).strip()
+                            pending_item['description'] = str(pending_item.get('description', '')).strip()
+                            
+                            # 过滤空行
+                            if pending_item['name']:
+                                imported_items.append(pending_item)
+                                progress_dialog.imported_count += 1
+                        
+                        # 检查当前行是否为空行
+                        if not name:
+                            pending_item = None
+                            continue
+                        
+                        # 计算层级
+                        if sequence:
+                            row_data['level'] = self.parse_sequence_level(sequence)
+                        else:
+                            row_data['level'] = 1
+                        
+                        # 存储第一行（顶级）的名称
+                        if first_row_name is None:
+                            first_row_name = name
+                        
+                        # 设置当前行为待处理项
+                        pending_item = row_data
                     
                 except Exception as e:
                     error_count += 1
@@ -938,7 +999,16 @@ class DetailImportDialog(QDialog):
                 
                 # 更新进度（每5行更新一次）
                 if row_idx % 5 == 0 or row_idx == total_rows:
-                    progress_dialog.update_progress(row_idx, item_data if item_data else None)
+                    current_item = pending_item if pending_item else (imported_items[-1] if imported_items else None)
+                    progress_dialog.update_progress(row_idx, current_item)
+            
+            # 处理最后一个待处理项
+            if pending_item is not None:
+                pending_item['name'] = str(pending_item.get('name', '')).strip()
+                pending_item['description'] = str(pending_item.get('description', '')).strip()
+                if pending_item['name']:
+                    imported_items.append(pending_item)
+                    progress_dialog.imported_count += 1
 
             workbook.close()
             
