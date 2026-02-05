@@ -29,6 +29,9 @@ from ui.fluent_widgets import PushButton, PrimaryPushButton
 from .visual_import_dialog import VisualImportDialog
 from .excel_import_dialog import ExcelFileSelector
 
+from ..logic.detail_manager import DetailManager
+from ..data.detail_model import BiddingDetail, DetailItem as DetailItemModel
+
 
 class DetailItem:
     """明细项数据类"""
@@ -233,10 +236,12 @@ class BiddingDetailTab(QWidget):
         super().__init__()
         self.parent_page = parent_page
         self.bidding_manager = parent_page.bidding_manager
+        self.detail_manager = DetailManager(parent_page.bidding_manager.db_manager)
         self.current_bidding_id = None
         self.current_bidding_code = None
         self.current_bidding_name = None
         self.current_summary_item = None
+        self.current_detail_id = None  # 当前明细表ID
         # 获取WD基础路径 - 使用固定路径，与投标汇总表保持一致
         import os
         self.wd_base_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "WD")
@@ -499,16 +504,123 @@ class BiddingDetailTab(QWidget):
 
     def load_detail_tree_data(self):
         """加载明细树形数据"""
-        # TODO: 从数据库加载实际明细数据
-        # 目前根据汇总项生成示例数据
-        
         self.detail_tree.clear()
+        self.current_detail_id = None
         
-        if self.current_summary_item:
-            sample_data = self._generate_sample_data(self.current_summary_item.name)
-            self.build_tree_from_data(sample_data)
+        if not self.current_summary_item:
+            print("[加载明细] 当前汇总项为空")
+            return
         
+        # 尝试从数据库加载明细数据
+        summary_item_id = getattr(self.current_summary_item, 'id', 0)
+        summary_item_name = getattr(self.current_summary_item, 'name', 'Unknown')
+        print(f"[加载明细] 投标ID: {self.current_bidding_id}, 汇总项ID: {summary_item_id}, 名称: {summary_item_name}")
+        
+        if summary_item_id and self.current_bidding_id:
+            detail = self.detail_manager.get_detail_by_summary_item(
+                self.current_bidding_id, summary_item_id
+            )
+            print(f"[加载明细] 查询结果: {detail}")
+            if detail:
+                print(f"[加载明细] 明细ID: {detail.id}, 项目数: {len(detail.items)}")
+                if detail.items:
+                    # 从数据库加载到UI
+                    self.current_detail_id = detail.id
+                    self._build_tree_from_detail_items(detail.items)
+                    self.calculate_total()
+                    print(f"[加载明细] 成功加载 {len(detail.items)} 个顶层项目")
+                    return
+            else:
+                print("[加载明细] 数据库中没有找到明细数据")
+        else:
+            print(f"[加载明细] 参数无效: bidding_id={self.current_bidding_id}, summary_item_id={summary_item_id}")
+        
+        # 数据库中没有数据，生成示例数据
+        print("[加载明细] 生成示例数据")
+        sample_data = self._generate_sample_data(self.current_summary_item.name)
+        self.build_tree_from_data(sample_data)
         self.calculate_total()
+
+    def _build_tree_from_detail_items(self, items: list, parent_tree_item=None):
+        """从DetailItem模型构建树形控件"""
+        for item in items:
+            # 创建树节点
+            if parent_tree_item:
+                tree_item = QTreeWidgetItem(parent_tree_item)
+            else:
+                tree_item = QTreeWidgetItem(self.detail_tree)
+
+            # 创建UI用的DetailItem
+            ui_item = DetailItem()
+            ui_item.sequence = item.sequence
+            ui_item.name = item.name
+            ui_item.specification = item.specification
+            ui_item.description = item.description
+            ui_item.unit = item.unit
+            ui_item.quantity = item.quantity
+            ui_item.unit_price = item.unit_price
+            ui_item.labor_unit_price = item.labor_price
+            ui_item.material_unit_price = item.main_material_price
+            ui_item.material_loss_rate = item.main_material_loss_rate
+            ui_item.auxiliary_unit_price = item.aux_material_price
+            ui_item.machine_unit_price = item.machinery_price
+            ui_item.other_unit_price = item.other_price
+            ui_item.total_price = item.total_price
+            ui_item.labor_total = item.labor_total
+            ui_item.material_total = item.material_total
+            ui_item.auxiliary_total = item.auxiliary_total
+            ui_item.machine_total = item.machine_total
+            ui_item.other_total = item.other_total
+            ui_item.management_total = item.management_total
+            ui_item.tax_total = item.tax_total
+            ui_item.comprehensive_total = item.comprehensive_total
+            ui_item.remark = item.remark
+            ui_item.level = item.level
+
+            # 设置显示文本
+            tree_item.setText(0, "")
+            tree_item.setText(1, ui_item.sequence)
+            tree_item.setText(2, ui_item.name)
+            tree_item.setText(3, ui_item.specification)
+            tree_item.setText(4, ui_item.description)
+            tree_item.setText(5, ui_item.unit)
+            tree_item.setText(6, f"{ui_item.quantity:,.2f}")
+            tree_item.setText(7, f"{ui_item.unit_price:,.2f}")
+            tree_item.setText(8, f"{ui_item.labor_unit_price:,.2f}")
+            tree_item.setText(9, f"{ui_item.material_unit_price:,.2f}")
+            tree_item.setText(10, f"{ui_item.material_loss_rate:,.2f}")
+            tree_item.setText(11, f"{ui_item.auxiliary_unit_price:,.2f}")
+            tree_item.setText(12, f"{ui_item.machine_unit_price:,.2f}")
+            tree_item.setText(13, f"{ui_item.other_unit_price:,.2f}")
+            tree_item.setText(14, f"{ui_item.total_price:,.2f}")
+            tree_item.setText(15, f"{ui_item.labor_total:,.2f}")
+            tree_item.setText(16, f"{ui_item.material_total:,.2f}")
+            tree_item.setText(17, f"{ui_item.auxiliary_total:,.2f}")
+            tree_item.setText(18, f"{ui_item.machine_total:,.2f}")
+            tree_item.setText(19, f"{ui_item.other_total:,.2f}")
+            tree_item.setText(20, f"{ui_item.management_total:,.2f}")
+            tree_item.setText(21, f"{ui_item.tax_total:,.2f}")
+            tree_item.setText(22, f"{ui_item.comprehensive_total:,.2f}")
+            tree_item.setText(23, ui_item.remark)
+
+            # 存储数据
+            tree_item.setData(0, Qt.UserRole, ui_item)
+
+            # 设置对齐
+            tree_item.setTextAlignment(1, Qt.AlignCenter)
+            for col in range(6, 23):
+                tree_item.setTextAlignment(col, Qt.AlignRight | Qt.AlignVCenter)
+
+            # 一级节点加粗
+            if ui_item.level == 1:
+                font = QFont("Microsoft YaHei", 10, QFont.Bold)
+                for col in range(24):
+                    tree_item.setFont(col, font)
+
+            # 递归处理子节点
+            if item.children:
+                self._build_tree_from_detail_items(item.children, tree_item)
+                tree_item.setExpanded(True)
 
     def _generate_sample_data(self, summary_name: str) -> list:
         """根据汇总项名称生成示例明细数据"""
@@ -1051,14 +1163,118 @@ class BiddingDetailTab(QWidget):
             self.calculate_total()
 
     def on_save_detail(self):
-        """保存明细"""
+        """保存明细到数据库"""
         if not self.current_bidding_id:
             MessageDialog.warning(self, "提示", "请先选择投标")
             return
 
-        # TODO: 实现保存到数据库的逻辑
-        # 需要保存当前汇总项ID与明细的关联关系
-        MessageDialog.information(self, "成功", "明细已保存")
+        if not self.current_summary_item:
+            MessageDialog.warning(self, "提示", "请先选择汇总表项目")
+            return
+
+        # 从UI收集数据
+        detail = self.collect_data_from_ui()
+        if not detail:
+            MessageDialog.warning(self, "提示", "没有数据需要保存")
+            return
+
+        # 调试信息
+        summary_item_id = getattr(self.current_summary_item, 'id', 0)
+        print(f"[保存明细] 投标ID: {detail.bidding_id}, 汇总项ID: {summary_item_id}")
+        print(f"[保存明细] 明细项目数: {len(detail.items)}")
+        if detail.items:
+            print(f"[保存明细] 第一个项目: {detail.items[0].name}, 子节点数: {len(detail.items[0].children)}")
+
+        # 调用Logic层保存
+        try:
+            success, result = self.detail_manager.save_detail(detail, update_summary=True)
+            if success:
+                self.current_detail_id = result
+                print(f"[保存明细] 保存成功，明细ID: {result}")
+                MessageDialog.information(self, "成功", f"明细数据保存成功（明细ID: {result}）")
+                # 通知父页面刷新汇总表
+                if self.parent_page and hasattr(self.parent_page, 'refresh_summary'):
+                    self.parent_page.refresh_summary()
+            else:
+                print(f"[保存明细] 保存失败: {result}")
+                MessageDialog.warning(self, "保存失败", str(result))
+        except Exception as e:
+            print(f"[保存明细] 异常: {e}")
+            import traceback
+            traceback.print_exc()
+            MessageDialog.critical(self, "错误", f"保存失败：{str(e)}")
+
+    def collect_data_from_ui(self) -> BiddingDetail:
+        """从UI收集数据构建BiddingDetail对象"""
+        detail = BiddingDetail()
+        detail.id = self.current_detail_id
+        detail.bidding_id = self.current_bidding_id
+        detail.summary_item_id = getattr(self.current_summary_item, 'id', 0)
+        detail.version = "V1.0"  # 默认版本，后续可支持版本选择
+        detail.created_by = ""  # 可从登录用户获取
+        detail.remark = ""
+
+        # 递归收集树形数据
+        detail.items = self._collect_tree_items()
+
+        return detail
+
+    def _collect_tree_items(self) -> list:
+        """递归收集树形控件中的数据"""
+        items = []
+
+        def collect_recursive(tree_item: QTreeWidgetItem, parent_item: DetailItemModel = None) -> DetailItemModel:
+            """递归收集单个节点及其子节点"""
+            # 获取节点数据
+            detail_item_ui = tree_item.data(0, Qt.UserRole)
+            if not detail_item_ui:
+                return None
+
+            # 创建数据模型对象
+            detail_item = DetailItemModel()
+            detail_item.sequence = detail_item_ui.sequence
+            detail_item.name = detail_item_ui.name
+            detail_item.specification = detail_item_ui.specification
+            detail_item.description = detail_item_ui.description
+            detail_item.unit = detail_item_ui.unit
+            detail_item.quantity = detail_item_ui.quantity
+            detail_item.unit_price = detail_item_ui.unit_price
+            detail_item.labor_price = detail_item_ui.labor_unit_price
+            detail_item.main_material_price = detail_item_ui.material_unit_price
+            detail_item.main_material_loss_rate = detail_item_ui.material_loss_rate
+            detail_item.aux_material_price = detail_item_ui.auxiliary_unit_price
+            detail_item.machinery_price = detail_item_ui.machine_unit_price
+            detail_item.other_price = detail_item_ui.other_unit_price
+            detail_item.total_price = detail_item_ui.total_price
+            detail_item.labor_total = detail_item_ui.labor_total
+            detail_item.material_total = detail_item_ui.material_total
+            detail_item.auxiliary_total = detail_item_ui.auxiliary_total
+            detail_item.machine_total = detail_item_ui.machine_total
+            detail_item.other_total = detail_item_ui.other_total
+            detail_item.management_total = detail_item_ui.management_total
+            detail_item.tax_total = detail_item_ui.tax_total
+            detail_item.comprehensive_total = detail_item_ui.comprehensive_total
+            detail_item.remark = detail_item_ui.remark
+            detail_item.level = detail_item_ui.level
+            detail_item.parent_id = parent_item.id if parent_item else None
+
+            # 递归收集子节点
+            for i in range(tree_item.childCount()):
+                child_tree_item = tree_item.child(i)
+                child_detail_item = collect_recursive(child_tree_item, detail_item)
+                if child_detail_item:
+                    detail_item.children.append(child_detail_item)
+
+            return detail_item
+
+        # 遍历顶层节点
+        for i in range(self.detail_tree.topLevelItemCount()):
+            tree_item = self.detail_tree.topLevelItem(i)
+            detail_item = collect_recursive(tree_item, None)
+            if detail_item:
+                items.append(detail_item)
+
+        return items
 
     def load_bidding_data(self, bidding_id: int):
         """加载投标明细数据 - 从数据库加载或显示提示"""

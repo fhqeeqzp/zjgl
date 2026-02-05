@@ -693,6 +693,9 @@ class BiddingSummaryTab(QWidget):
 
             # 创建SummaryItem
             summary_item = SummaryItem(
+                id=db_id or 0,  # 设置数据库ID
+                summary_id=item_data.get('summary_id', 0),
+                parent_id=parent_id,
                 item_type=SummaryItemType.CATEGORY if item_type == 'category' else SummaryItemType.ITEM,
                 sequence=sequence,
                 name=name,

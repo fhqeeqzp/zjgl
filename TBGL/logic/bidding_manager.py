@@ -82,6 +82,9 @@ class BiddingManager:
             # 初始化汇总表
             self.init_summary_tables()
             
+            # 初始化明细表
+            self.init_detail_tables()
+            
             return True
         except Exception as e:
             print(f"创建投标表失败: {e}")
@@ -845,7 +848,7 @@ class BiddingManager:
             """
             self.db_manager.execute_update(sql_detail)
             
-            # 创建投标明细项目表
+            # 创建投标明细项目表（包含所有字段）
             sql_items = """
             CREATE TABLE IF NOT EXISTS bidding_detail_items (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -858,6 +861,20 @@ class BiddingManager:
                 quantity DECIMAL(15, 4) DEFAULT 0 COMMENT '工程量',
                 unit_price DECIMAL(15, 2) DEFAULT 0 COMMENT '综合单价',
                 total_price DECIMAL(15, 2) DEFAULT 0 COMMENT '合价',
+                labor_price DECIMAL(15, 2) DEFAULT 0 COMMENT '人工单价',
+                main_material_price DECIMAL(15, 2) DEFAULT 0 COMMENT '主材单价',
+                main_material_loss_rate DECIMAL(5, 2) DEFAULT 0 COMMENT '主材损耗率(%)',
+                aux_material_price DECIMAL(15, 2) DEFAULT 0 COMMENT '辅材单价',
+                machinery_price DECIMAL(15, 2) DEFAULT 0 COMMENT '机械单价',
+                other_price DECIMAL(15, 2) DEFAULT 0 COMMENT '其他单价',
+                labor_total DECIMAL(15, 2) DEFAULT 0 COMMENT '人工合价',
+                material_total DECIMAL(15, 2) DEFAULT 0 COMMENT '主材合价',
+                auxiliary_total DECIMAL(15, 2) DEFAULT 0 COMMENT '辅材合价',
+                machine_total DECIMAL(15, 2) DEFAULT 0 COMMENT '机械合价',
+                other_total DECIMAL(15, 2) DEFAULT 0 COMMENT '其他合价',
+                management_total DECIMAL(15, 2) DEFAULT 0 COMMENT '管理费合计',
+                tax_total DECIMAL(15, 2) DEFAULT 0 COMMENT '税金合价',
+                comprehensive_total DECIMAL(15, 2) DEFAULT 0 COMMENT '综合合价',
                 remark VARCHAR(500) COMMENT '备注',
                 sort_order INT DEFAULT 0 COMMENT '排序顺序',
                 FOREIGN KEY (detail_id) REFERENCES bidding_details(id) ON DELETE CASCADE,
