@@ -97,7 +97,7 @@ class VisualImportDialog(QDialog):
     
     # 字段定义: (字段标识, 字段显示名称, 是否必填, 匹配关键词列表)
     FIELD_DEFINITIONS = [
-        ('sequence', '序号', False, ['序号', '编号', 'no', 'no.', 'number', 'id', '流水号']),
+        ('sequence', '序号', False, ['序号', '编号', 'no', 'no.', 'number', 'id']),
         ('name', '分部分项工程名称', True, ['分部分项工程名称', '工程名称', '项目名称', '名称', '项目', '工程', 'name', 'item', '工程或费用名称', '费用名称']),
         ('specification', '规格型号', False, ['规格型号', '规格', '型号', 'spec', 'specification', 'type', 'model']),
         ('description', '项目特征描述', False, ['项目特征描述', '特征描述', '项目特征', '描述', '特征', 'description', '工作内容', '内容', '工作']),
@@ -818,8 +818,10 @@ class VisualImportDialog(QDialog):
                     self.row_types[row_idx] = RowType.INVALID
                 else:
                     # 无项目特征，说明是分部行
-                    # 根据项目名称判断分部级别
-                    division_level = self._detect_division_level(name_val, division_stack)
+                    # 根据序号和项目名称判断分部级别（优先使用序号）
+                    sequence_col = self.column_mappings.get('sequence')
+                    sequence_val = str(row_data[sequence_col]).strip() if sequence_col and sequence_col < len(row_data) else ""
+                    division_level = self._detect_division_level(name_val, division_stack, sequence_val)
                     
                     if division_level == 1:
                         self.row_types[row_idx] = RowType.DIVISION_1
@@ -900,10 +902,34 @@ class VisualImportDialog(QDialog):
         
         return False
     
-    def _detect_division_level(self, name_val: str, division_stack: list) -> int:
+    def _parse_sequence_level(self, sequence: str) -> int:
+        """根据序号解析层级
+        
+        规则：
+        - 中文数字（一、二、三...）-> level 1
+        - 无小数点（如 "1"）-> level 2
+        - 1个小数点（如 "1.1"）-> level 3
+        - 2个小数点（如 "1.1.1"）-> level 4
+        - 3个及以上小数点 -> level 5
+        """
+        if not sequence:
+            return 1
+        
+        sequence = str(sequence).strip()
+        
+        # 中文数字开头 -> level 1
+        chinese_nums = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
+        if any(sequence.startswith(num) for num in chinese_nums):
+            return 1
+        
+        # 计算小数点数量
+        dots = sequence.count('.')
+        return dots + 2
+    
+    def _detect_division_level(self, name_val: str, division_stack: list, sequence_val: str = "") -> int:
         """检测分部级别
         
-        根据名称特征判断分部层级：
+        优先根据序号判断，其次根据名称特征：
         - 一级分部：以中文数字开头（一、二、三...）
         - 二级分部：以阿拉伯数字+点开头（1. 2. 3.）
         - 三级分部：以括号数字开头（(1) (2) 或 1) 2)）
@@ -911,6 +937,12 @@ class VisualImportDialog(QDialog):
         - 五级分部：其他格式
         """
         import re
+        
+        # 优先使用序号判断层级
+        if sequence_val:
+            level = self._parse_sequence_level(sequence_val)
+            if level > 1:  # 如果序号有效（不是默认的1）
+                return level
         
         # 中文数字开头 - 一级分部
         chinese_nums = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
@@ -1262,8 +1294,12 @@ class VisualImportDialog(QDialog):
                 if merge_buffer and current_item:
                     # 将合并行内容附加到上一个清单行
                     self._apply_merge_rows(current_item, merge_buffer)
-                
-                item_data['level'] = 2 if current_division else 1
+
+                # 清单行的级别 = 当前分部级 + 1（如果没有分部则为1）
+                if current_division:
+                    item_data['level'] = current_division['level'] + 1
+                else:
+                    item_data['level'] = 1
                 item_data['is_division'] = False
                 imported_items.append(item_data)
                 current_item = item_data
@@ -1276,10 +1312,45 @@ class VisualImportDialog(QDialog):
         # 处理最后的合并行
         if merge_buffer and current_item:
             self._apply_merge_rows(current_item, merge_buffer)
-        
+
+        # 使用汇总项名称创建顶级行（level 0）作为所有内容的父级
+        if self.summary_name and imported_items:
+            # 创建顶级行（level 0）
+            top_level_item = {
+                'sequence': '1',
+                'name': self.summary_name,
+                'specification': '',
+                'description': '',
+                'unit': '',
+                'quantity': 0.0,
+                'unit_price': 0.0,
+                'labor_unit_price': 0.0,
+                'material_unit_price': 0.0,
+                'material_loss_rate': 0.0,
+                'auxiliary_unit_price': 0.0,
+                'machine_unit_price': 0.0,
+                'other_unit_price': 0.0,
+                'total_price': 0.0,
+                'labor_total': 0.0,
+                'material_total': 0.0,
+                'auxiliary_total': 0.0,
+                'machine_total': 0.0,
+                'other_total': 0.0,
+                'management_total': 0.0,
+                'tax_total': 0.0,
+                'comprehensive_total': 0.0,
+                'level': 1,
+                'remark': ''
+            }
+            # 将其他所有行的层级加1（因为插入了新的父级）
+            for item in imported_items:
+                item['level'] = item.get('level', 1) + 1
+            # 在开头插入顶级行
+            imported_items.insert(0, top_level_item)
+
         # 存储导入的数据
         self._imported_data = imported_items
-        
+
         MessageDialog.information(self, "导入成功", f"成功导入 {len(imported_items)} 条数据")
         self.accept()
     
