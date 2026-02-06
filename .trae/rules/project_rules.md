@@ -1888,7 +1888,381 @@ project_info = create_info_group(
 - [ ] 分组标题使用 `QLabel` 并设置 `objectName="groupTitleLabel"`
 - [ ] 样式已添加到 `themes/dark.qss` 和 `themes/light.qss`
 
+## 13. TBGL模块数据结构规范
+
+### 13.1 数据表关系说明
+
+TBGL（投标管理）模块包含以下核心数据表，采用树形层级结构存储投标数据：
+
+#### 表关系图
+
+```
+投标信息表 (biddings)
+    │
+    ├── 投标汇总表 (bidding_summaries) [支持多版本]
+    │       │
+    │       └── 投标汇总表明细 (bidding_summary_items) [树形结构]
+    │               │
+    │               └── 投标明细表 (bidding_details) [支持多版本]
+    │                       │
+    │                       └── 投标明细项目表 (bidding_detail_items) [树形结构]
+    │
+    └── 其他关联表...
+```
+
+### 13.2 核心数据表结构
+
+#### 13.2.1 投标信息表 (biddings)
+
+存储投标的基本信息。
+
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| id | int | 主键ID |
+| bidding_code | str | 投标编码 (格式: 项目编码+TB-001) |
+| project_id | int | 关联的项目ID |
+| project_code | str | 项目编码（冗余存储） |
+| tender_code | str | 招标编码 |
+| bidding_name | str | 投标名称/招标项目名称 |
+| tenderer | str | 招标人 |
+| planned_duration | str | 计划工期 |
+| bid_bond | float | 投标保证金 |
+| bid_deadline | datetime | 开标日期/投标截止日期 |
+| control_price | float | 招标控制价 |
+| status | BiddingStatus | 投标状态 |
+| tender_doc_path | str | 招标文件Word路径 |
+| remark | str | 备注 |
+| created_at | datetime | 创建时间 |
+| updated_at | datetime | 更新时间 |
+
+#### 13.2.2 投标汇总表 (bidding_summaries)
+
+存储投标汇总的版本信息，支持多版本管理。
+
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| id | int | 主键ID |
+| bidding_id | int | 投标ID（外键，关联biddings表） |
+| version | str | 版本号（如 V1.0） |
+| version_name | str | 版本名称（如 初始版本） |
+| is_active | bool | 是否为当前生效版本 |
+| created_at | datetime | 创建时间 |
+| updated_at | datetime | 更新时间 |
+| created_by | str | 创建人 |
+| remark | str | 备注 |
+
+**版本管理规则**：
+- 一个投标可以有多个汇总版本
+- 只有一个版本的 `is_active=True`
+- 版本号格式：V + 主版本号 + . + 次版本号
+
+#### 13.2.3 投标汇总表明细 (bidding_summary_items)
+
+存储汇总表的树形结构明细数据。
+
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| id | int | 主键ID |
+| summary_id | int | 汇总表ID（外键） |
+| parent_id | int | 父节点ID（None表示根节点） |
+| item_type | SummaryItemType | 项目类型 |
+| sequence | str | 序号 |
+| name | str | 工程项目及费用名称 |
+| quote_price | float | 报价（合价） |
+| main_material_fee | float | 其中：主材费 |
+| aux_material_fee | float | 其中：辅材费 |
+| labor_fee | float | 其中：人工费 |
+| machinery_fee | float | 其中：机械费 |
+| other_fee | float | 其中：其他费 |
+| management_fee | float | 其中：管理费 |
+| tax_fee | float | 其中：税金 |
+
+**项目类型枚举**：
+- `CATEGORY` = "category" (分类/章节，一级)
+- `SUBCATEGORY` = "subcategory" (子分类，二级)
+- `ITEM` = "item" (具体项目，三级)
+
+#### 13.2.4 投标明细表 (bidding_details)
+
+存储投标明细的版本信息，与汇总项通过 `summary_item_id` 关联。
+
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| id | int | 主键ID |
+| bidding_id | int | 投标ID（外键，关联biddings表） |
+| summary_item_id | int | 关联的汇总项ID（外键，关联bidding_summary_items表） |
+| version | str | 版本号 |
+| created_at | datetime | 创建时间 |
+| updated_at | datetime | 更新时间 |
+| created_by | str | 创建人 |
+| remark | str | 备注 |
+
+**关键关联**：`summary_item_id` 是汇总表和明细表之间的桥梁
+
+#### 13.2.5 投标明细项目表 (bidding_detail_items)
+
+存储明细表的树形结构详细数据。
+
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| id | int | 主键ID |
+| detail_id | int | 明细表ID（外键） |
+| parent_id | int | 父节点ID |
+| sequence | str | 序号 |
+| name | str | 分部分项工程名称 |
+| description | str | 项目特征描述 |
+| unit | str | 单位 |
+| quantity | float | 工程量 |
+| unit_price | float | 综合单价 |
+| total_price | float | 合价 |
+| labor_price | float | 人工单价 |
+| main_material_price | float | 主材单价 |
+| main_material_loss_rate | float | 主材损耗率(%) |
+| aux_material_price | float | 辅材单价 |
+| machinery_price | float | 机械单价 |
+| other_price | float | 其他单价 |
+| remark | str | 备注 |
+| sort_order | int | 排序顺序 |
+
+### 13.3 数据关系详解
+
+#### 13.3.1 层级结构对应关系
+
+投标汇总表和投标明细表的层级结构是**镜像关系**：
+
+```
+投标汇总表（树形结构）              投标明细表（树形结构）
+├── 分部分项工程（一级）        ←→    ├── 分部分项工程（一级）
+│   ├── 分部工程（二级）        ←→    │   ├── 分部工程（二级）
+│   │   ├── 分项工程（三级）    ←→    │   │   ├── 分项工程（三级）
+│   │   │   ├── 清单项目        ←→    │   │   │   ├── 清单项目（详细数据）
+│   │   │   └── 清单项目        ←→    │   │   │   └── 清单项目（详细数据）
+```
+
+#### 13.3.2 数据计算关系
+
+| 汇总表字段 | 计算来源 | 说明 |
+|-----------|---------|------|
+| 工程项目及费用名称 | 明细表：分部分项工程名称 | 名称对应 |
+| 报价（合价） | 明细表：合价汇总 | 明细合价汇总 = 汇总表报价 |
+| 其中：主材费 | 明细表：主材单价 × 工程量 × (1+损耗率) | 明细计算 = 汇总表费用 |
+| 其中：人工费 | 明细表：人工单价 × 工程量 | 明细计算 = 汇总表费用 |
+| 其中：辅材费 | 明细表：辅材单价 × 工程量 | 明细计算 = 汇总表费用 |
+| 其中：机械费 | 明细表：机械单价 × 工程量 | 明细计算 = 汇总表费用 |
+| 其中：其他费 | 明细表：其他单价 × 工程量 | 明细计算 = 汇总表费用 |
+
+#### 13.3.3 版本管理关系
+
+```
+汇总表版本 V1.0
+├── 土建工程（报价：100万）
+│   └── 混凝土工程（报价：60万） ← 双击这一行
+│       └── 导入/创建明细版本 V1.0
+│           ├── C30混凝土（工程量100m³，单价5000元，合价50万）
+│           ├── C25混凝土（工程量50m³，单价2000元，合价10万）
+│           └── 汇总：60万 → 回写到汇总表
+│
+汇总表版本 V2.0（调整后的新报价）
+├── 土建工程（报价：110万）
+│   └── 混凝土工程（报价：65万） ← 双击这一行
+│       └── 导入/创建明细版本 V1.1
+│           ├── ...
+│           └── 汇总：65万 → 回写到汇总表
+```
+
+### 13.4 数据流向
+
+```
+用户操作：双击汇总表某一行
+    ↓
+打开明细编辑界面
+    ↓
+导入Excel明细数据 / 手动录入明细数据
+    ↓
+保存明细数据到 bidding_detail_items
+    ↓
+计算各费用项汇总值
+    ↓
+更新对应汇总项的报价数据
+    ↓
+刷新汇总表显示
+```
+
+### 13.5 代码实现规范
+
+#### 13.5.1 数据层规范
+
+```python
+# data/detail_model.py
+from dataclasses import dataclass, field
+from typing import Optional, List
+from datetime import datetime
+
+@dataclass
+class BiddingDetail:
+    """投标明细表模型"""
+    id: Optional[int] = None
+    bidding_id: int = 0
+    summary_item_id: int = 0  # 关键：关联到汇总项
+    version: str = "V1.0"
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    created_by: str = ""
+    remark: str = ""
+    items: List['DetailItem'] = field(default_factory=list)
+
+@dataclass
+class DetailItem:
+    """投标明细项目模型"""
+    id: Optional[int] = None
+    detail_id: int = 0
+    parent_id: Optional[int] = None
+    sequence: str = ""
+    name: str = ""
+    description: str = ""
+    unit: str = ""
+    quantity: float = 0.0
+    unit_price: float = 0.0
+    total_price: float = 0.0
+    labor_price: float = 0.0
+    main_material_price: float = 0.0
+    main_material_loss_rate: float = 0.0
+    aux_material_price: float = 0.0
+    machinery_price: float = 0.0
+    other_price: float = 0.0
+    remark: str = ""
+    sort_order: int = 0
+    children: List['DetailItem'] = field(default_factory=list)
+```
+
+#### 13.5.2 业务层规范
+
+```python
+# logic/detail_manager.py
+class DetailManager:
+    """投标明细管理器"""
+    
+    def save_detail(self, detail: BiddingDetail) -> BiddingDetail:
+        """
+        保存明细数据并更新汇总表
+        
+        流程：
+        1. 保存明细主表到 bidding_details
+        2. 保存明细项目到 bidding_detail_items（树形结构）
+        3. 计算各项费用汇总
+        4. 更新对应汇总项的报价数据
+        5. 通知观察者刷新UI
+        """
+        # 1. 保存明细主表
+        if detail.id:
+            detail = self.db.update(detail)
+        else:
+            detail = self.db.insert(detail)
+        
+        # 2. 保存明细项目（递归保存树形结构）
+        self._save_items(detail.id, detail.items)
+        
+        # 3. 计算汇总
+        summary = self._calculate_summary(detail.items)
+        
+        # 4. 更新汇总表
+        self._update_summary_item(detail.summary_item_id, summary)
+        
+        # 5. 通知刷新
+        self._notify("detail_saved", detail)
+        
+        return detail
+    
+    def _calculate_summary(self, items: List[DetailItem]) -> dict:
+        """计算明细汇总数据"""
+        total = {
+            'quote_price': 0.0,
+            'labor_fee': 0.0,
+            'main_material_fee': 0.0,
+            'aux_material_fee': 0.0,
+            'machinery_fee': 0.0,
+            'other_fee': 0.0,
+        }
+        
+        for item in items:
+            if item.children:
+                # 递归计算子项
+                child_total = self._calculate_summary(item.children)
+                for key in total:
+                    total[key] += child_total[key]
+            else:
+                # 计算当前项
+                total['quote_price'] += item.total_price
+                total['labor_fee'] += item.labor_price * item.quantity
+                total['main_material_fee'] += item.main_material_price * item.quantity * (1 + item.main_material_loss_rate / 100)
+                total['aux_material_fee'] += item.aux_material_price * item.quantity
+                total['machinery_fee'] += item.machinery_price * item.quantity
+                total['other_fee'] += item.other_price * item.quantity
+        
+        return total
+```
+
+#### 13.5.3 UI层规范
+
+```python
+# ui/bidding_detail_tab.py
+class BiddingDetailTab(QWidget):
+    """投标明细页签"""
+    
+    def __init__(self, bidding_id: int, summary_item_id: int, parent=None):
+        super().__init__(parent)
+        self.bidding_id = bidding_id
+        self.summary_item_id = summary_item_id
+        self.detail_manager = DetailManager()
+        self.setup_ui()
+        
+    def setup_ui(self):
+        """设置UI界面"""
+        self.setObjectName("biddingDetailTab")
+        
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
+        
+        # 工具栏
+        self.setup_toolbar()
+        
+        # 明细树形表格
+        self.setup_detail_tree()
+        
+        # 底部按钮
+        self.setup_buttons()
+        
+    def on_save_clicked(self):
+        """保存按钮点击事件"""
+        # 1. 从UI收集数据
+        detail = self.collect_data_from_ui()
+        
+        # 2. 调用Logic层保存
+        try:
+            saved_detail = self.detail_manager.save_detail(detail)
+            MessageDialog.information(self, "成功", "明细数据保存成功")
+            self.load_data()  # 刷新显示
+        except Exception as e:
+            MessageDialog.critical(self, "错误", f"保存失败：{str(e)}")
+```
+
+### 13.6 代码审查清单（TBGL模块）
+
+提交代码前，请确认以下事项：
+
+- [ ] 数据模型使用 `@dataclass` 定义，包含 `to_dict` 和 `from_dict` 方法
+- [ ] 树形结构数据使用递归方式保存和加载
+- [ ] 明细保存时正确计算各项费用汇总
+- [ ] 保存明细后更新对应汇总项的报价数据
+- [ ] 版本号格式符合规范（V + 主版本号 + . + 次版本号）
+- [ ] 使用 `summary_item_id` 正确关联汇总表和明细表
+- [ ] 明细项目的 `total_price` 计算正确（单价 × 工程量）
+- [ ] 主材费计算包含损耗率（单价 × 工程量 × (1 + 损耗率/100)）
+- [ ] 保存操作使用事务保证数据一致性
+- [ ] 保存成功后通知观察者刷新UI
+
 ---
 
-**最后更新**: 2026-02-04
-**版本**: v1.3
+**最后更新**: 2026-02-05
+**版本**: v1.4

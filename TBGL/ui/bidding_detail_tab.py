@@ -8,6 +8,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
+    QTextEdit,
     QTreeWidget,
     QTreeWidgetItem,
     QHeaderView,
@@ -18,8 +20,10 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QGridLayout,
     QFrame,
-    QApplication
+    QApplication,
+    QFileDialog
 )
+from PySide6.QtCore import QTimer
 
 from ui.message_dialog import MessageDialog
 from PySide6.QtCore import Qt
@@ -245,10 +249,16 @@ class BiddingDetailTab(QWidget):
         # 获取WD基础路径 - 使用固定路径，与投标汇总表保持一致
         import os
         self.wd_base_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "WD")
-        
+
         # 初始化可见列（默认显示第2-14列，第0列缩进列和第1列序号始终显示）
         self.visible_columns = list(range(2, 15))  # 2-14列默认显示（缩进列0和序号列1始终显示，不在此列表中）
-        
+
+        # 自动保存定时器（防抖，延迟500ms保存）
+        self.auto_save_timer = QTimer(self)
+        self.auto_save_timer.setSingleShot(True)
+        self.auto_save_timer.timeout.connect(self._auto_save)
+        self._pending_save = False  # 标记是否有待保存的数据
+
         self.setup_ui()
         
         # 应用初始列可见性
@@ -325,6 +335,12 @@ class BiddingDetailTab(QWidget):
         self.reset_level_btn.clicked.connect(self.reset_all_to_level_one)
         excel_toolbar.addWidget(self.reset_level_btn)
 
+        # 导出按钮
+        self.export_excel_btn = PushButton("📤 导出Excel")
+        self.export_excel_btn.setToolTip("将当前明细数据导出为Excel文件")
+        self.export_excel_btn.clicked.connect(self.on_export_excel)
+        excel_toolbar.addWidget(self.export_excel_btn)
+
         excel_toolbar.addStretch()
 
         # 合计金额显示
@@ -377,10 +393,15 @@ class BiddingDetailTab(QWidget):
 
         toolbar_layout.addStretch()
 
-        # 保存明细按钮
-        self.save_btn = PrimaryPushButton("💾 保存明细")
-        self.save_btn.clicked.connect(self.on_save_detail)
-        toolbar_layout.addWidget(self.save_btn)
+        # 保存明细按钮（已改为自动保存，隐藏按钮）
+        # self.save_btn = PrimaryPushButton("💾 保存明细")
+        # self.save_btn.clicked.connect(self.on_save_detail)
+        # toolbar_layout.addWidget(self.save_btn)
+
+        # 自动保存状态标签
+        self.auto_save_label = QLabel("✓ 自动保存已开启")
+        self.auto_save_label.setStyleSheet("color: #28a745; font-size: 12px;")
+        toolbar_layout.addWidget(self.auto_save_label)
 
         table_layout.addLayout(toolbar_layout)
 
@@ -503,7 +524,7 @@ class BiddingDetailTab(QWidget):
         self.load_detail_tree_data()
 
     def load_detail_tree_data(self):
-        """加载明细树形数据"""
+        """加载明细树形数据 - 支持大数据量进度显示"""
         self.detail_tree.clear()
         self.current_detail_id = None
         
@@ -524,9 +545,32 @@ class BiddingDetailTab(QWidget):
             if detail:
                 print(f"[加载明细] 明细ID: {detail.id}, 项目数: {len(detail.items)}")
                 if detail.items:
-                    # 从数据库加载到UI
-                    self.current_detail_id = detail.id
-                    self._build_tree_from_detail_items(detail.items)
+                    # 计算总项目数（包括子节点）
+                    total_count = self._count_detail_items(detail.items)
+                    print(f"[加载明细] 总项目数（含子节点）: {total_count}")
+                    
+                    # 数据量大时显示进度条
+                    if total_count > 50:
+                        from PySide6.QtWidgets import QProgressDialog
+                        progress = QProgressDialog("正在加载明细数据...", "取消", 0, total_count, self)
+                        progress.setWindowModality(Qt.WindowModal)
+                        progress.setWindowTitle("加载进度")
+                        progress.setMinimumDuration(0)
+                        progress.setValue(0)
+                        progress.setMinimumSize(500, 150)
+
+                        self.current_detail_id = detail.id
+                        self._build_tree_from_detail_items(detail.items, None, progress, total_count)
+                        progress.setValue(total_count)
+                        progress.close()
+                        # 加载完成后，从叶子节点向上计算所有父级节点的汇总值
+                        self._update_all_tree_items_display_with_calc()
+                    else:
+                        self.current_detail_id = detail.id
+                        self._build_tree_from_detail_items(detail.items)
+                        # 加载完成后，从叶子节点向上计算所有父级节点的汇总值
+                        self._update_all_tree_items_display_with_calc()
+
                     self.calculate_total()
                     print(f"[加载明细] 成功加载 {len(detail.items)} 个顶层项目")
                     return
@@ -535,15 +579,36 @@ class BiddingDetailTab(QWidget):
         else:
             print(f"[加载明细] 参数无效: bidding_id={self.current_bidding_id}, summary_item_id={summary_item_id}")
         
-        # 数据库中没有数据，生成示例数据
-        print("[加载明细] 生成示例数据")
-        sample_data = self._generate_sample_data(self.current_summary_item.name)
-        self.build_tree_from_data(sample_data)
+        # 数据库中没有数据，显示空表（新建汇总行）
+        print("[加载明细] 新建汇总行，显示空表")
+        # 不加载任何数据，保持空表状态
         self.calculate_total()
-
-    def _build_tree_from_detail_items(self, items: list, parent_tree_item=None):
-        """从DetailItem模型构建树形控件"""
+    
+    def _count_detail_items(self, items: list) -> int:
+        """递归计算明细项目总数（包括子节点）"""
+        count = 0
         for item in items:
+            count += 1
+            if item.children:
+                count += self._count_detail_items(item.children)
+        return count
+
+    def _build_tree_from_detail_items(self, items: list, parent_tree_item=None, progress=None, total_count=None, current_count=None):
+        """从DetailItem模型构建树形控件 - 支持进度显示"""
+        if current_count is None:
+            current_count = [0]
+        
+        for item in items:
+            # 更新进度
+            if progress and total_count:
+                current_count[0] += 1
+                if current_count[0] % 10 == 0:
+                    progress.setValue(current_count[0])
+                    progress.setLabelText(f"正在加载明细数据... ({current_count[0]}/{total_count})")
+                    QApplication.processEvents()
+                    
+                    if progress.wasCanceled():
+                        return
             # 创建树节点
             if parent_tree_item:
                 tree_item = QTreeWidgetItem(parent_tree_item)
@@ -577,30 +642,52 @@ class BiddingDetailTab(QWidget):
             ui_item.remark = item.remark
             ui_item.level = item.level
 
-            # 设置显示文本
+            # 递归处理子节点（先处理子节点以计算父级汇总）
+            if item.children:
+                self._build_tree_from_detail_items(item.children, tree_item, progress, total_count, current_count)
+                tree_item.setExpanded(True)
+                # 计算父级节点的汇总值（从子节点重新计算，确保数据正确）
+                self._calculate_parent_totals(tree_item, ui_item)
+
+            # 设置显示文本（值为0的显示为空）
             tree_item.setText(0, "")
             tree_item.setText(1, ui_item.sequence)
             tree_item.setText(2, ui_item.name)
             tree_item.setText(3, ui_item.specification)
             tree_item.setText(4, ui_item.description)
             tree_item.setText(5, ui_item.unit)
-            tree_item.setText(6, f"{ui_item.quantity:,.2f}")
-            tree_item.setText(7, f"{ui_item.unit_price:,.2f}")
-            tree_item.setText(8, f"{ui_item.labor_unit_price:,.2f}")
-            tree_item.setText(9, f"{ui_item.material_unit_price:,.2f}")
-            tree_item.setText(10, f"{ui_item.material_loss_rate:,.2f}")
-            tree_item.setText(11, f"{ui_item.auxiliary_unit_price:,.2f}")
-            tree_item.setText(12, f"{ui_item.machine_unit_price:,.2f}")
-            tree_item.setText(13, f"{ui_item.other_unit_price:,.2f}")
-            tree_item.setText(14, f"{ui_item.total_price:,.2f}")
-            tree_item.setText(15, f"{ui_item.labor_total:,.2f}")
-            tree_item.setText(16, f"{ui_item.material_total:,.2f}")
-            tree_item.setText(17, f"{ui_item.auxiliary_total:,.2f}")
-            tree_item.setText(18, f"{ui_item.machine_total:,.2f}")
-            tree_item.setText(19, f"{ui_item.other_total:,.2f}")
-            tree_item.setText(20, f"{ui_item.management_total:,.2f}")
-            tree_item.setText(21, f"{ui_item.tax_total:,.2f}")
-            tree_item.setText(22, f"{ui_item.comprehensive_total:,.2f}")
+            
+            # 如果有子节点，父节点只显示合价，不显示工程量和单价
+            if item.children:
+                tree_item.setText(6, "")  # 工程量
+                tree_item.setText(7, "")  # 综合单价
+                tree_item.setText(8, "")  # 人工单价
+                tree_item.setText(9, "")  # 主材单价
+                tree_item.setText(10, "")  # 损耗率
+                tree_item.setText(11, "")  # 辅材单价
+                tree_item.setText(12, "")  # 机械单价
+                tree_item.setText(13, "")  # 其他单价
+            else:
+                # 叶子节点显示所有值
+                tree_item.setText(6, self._format_number(ui_item.quantity))
+                tree_item.setText(7, self._format_number(ui_item.unit_price))
+                tree_item.setText(8, self._format_number(ui_item.labor_unit_price))
+                tree_item.setText(9, self._format_number(ui_item.material_unit_price))
+                tree_item.setText(10, self._format_number(ui_item.material_loss_rate))
+                tree_item.setText(11, self._format_number(ui_item.auxiliary_unit_price))
+                tree_item.setText(12, self._format_number(ui_item.machine_unit_price))
+                tree_item.setText(13, self._format_number(ui_item.other_unit_price))
+            
+            # 所有节点都显示合价
+            tree_item.setText(14, self._format_number(ui_item.total_price))
+            tree_item.setText(15, self._format_number(ui_item.labor_total))
+            tree_item.setText(16, self._format_number(ui_item.material_total))
+            tree_item.setText(17, self._format_number(ui_item.auxiliary_total))
+            tree_item.setText(18, self._format_number(ui_item.machine_total))
+            tree_item.setText(19, self._format_number(ui_item.other_total))
+            tree_item.setText(20, self._format_number(ui_item.management_total))
+            tree_item.setText(21, self._format_number(ui_item.tax_total))
+            tree_item.setText(22, self._format_number(ui_item.comprehensive_total))
             tree_item.setText(23, ui_item.remark)
 
             # 存储数据
@@ -617,10 +704,50 @@ class BiddingDetailTab(QWidget):
                 for col in range(24):
                     tree_item.setFont(col, font)
 
-            # 递归处理子节点
-            if item.children:
-                self._build_tree_from_detail_items(item.children, tree_item)
-                tree_item.setExpanded(True)
+    def _format_number(self, value: float) -> str:
+        """格式化数字，0值显示为空"""
+        if value is None or value == 0:
+            return ""
+        return f"{value:,.2f}"
+
+    def _calculate_parent_totals(self, tree_item: QTreeWidgetItem, ui_item: DetailItem):
+        """计算父级节点的汇总值（从子节点汇总）"""
+        # 重置汇总值
+        total_price = 0.0
+        labor_total = 0.0
+        material_total = 0.0
+        auxiliary_total = 0.0
+        machine_total = 0.0
+        other_total = 0.0
+        management_total = 0.0
+        tax_total = 0.0
+        comprehensive_total = 0.0
+
+        # 累加所有子节点的值
+        for i in range(tree_item.childCount()):
+            child_item = tree_item.child(i)
+            child_data = child_item.data(0, Qt.UserRole)
+            if child_data:
+                total_price += child_data.total_price
+                labor_total += child_data.labor_total
+                material_total += child_data.material_total
+                auxiliary_total += child_data.auxiliary_total
+                machine_total += child_data.machine_total
+                other_total += child_data.other_total
+                management_total += child_data.management_total
+                tax_total += child_data.tax_total
+                comprehensive_total += child_data.comprehensive_total
+
+        # 更新父级节点的值
+        ui_item.total_price = total_price
+        ui_item.labor_total = labor_total
+        ui_item.material_total = material_total
+        ui_item.auxiliary_total = auxiliary_total
+        ui_item.machine_total = machine_total
+        ui_item.other_total = other_total
+        ui_item.management_total = management_total
+        ui_item.tax_total = tax_total
+        ui_item.comprehensive_total = comprehensive_total
 
     def _generate_sample_data(self, summary_name: str) -> list:
         """根据汇总项名称生成示例明细数据"""
@@ -710,7 +837,7 @@ class BiddingDetailTab(QWidget):
     def _add_tree_item_recursive(self, parent_item, item_data: dict):
         """递归添加树节点"""
         tree_item = QTreeWidgetItem(parent_item if parent_item else self.detail_tree)
-        
+
         # 创建DetailItem对象存储数据
         detail_item = DetailItem()
         detail_item.sequence = item_data.get('sequence', '')
@@ -737,31 +864,56 @@ class BiddingDetailTab(QWidget):
         detail_item.comprehensive_total = item_data.get('comprehensive_total', 0)
         detail_item.remark = item_data.get('remark', '')
         detail_item.level = item_data.get('level', 1)
-        
-        # 设置显示文本
+
+        # 递归添加子节点（先处理子节点以计算父级汇总）
+        children = item_data.get('children', [])
+        for child_data in children:
+            self._add_tree_item_recursive(tree_item, child_data)
+
+        if children:
+            tree_item.setExpanded(True)
+            # 计算父级节点的汇总值
+            self._calculate_parent_totals_from_tree(tree_item, detail_item)
+
+        # 设置显示文本（值为0的显示为空）
         tree_item.setText(0, "")  # 缩进列（空）
         tree_item.setText(1, detail_item.sequence)
         tree_item.setText(2, detail_item.name)
         tree_item.setText(3, detail_item.specification)
         tree_item.setText(4, detail_item.description)  # 项目特征描述
         tree_item.setText(5, detail_item.unit)
-        tree_item.setText(6, f"{detail_item.quantity:,.2f}")
-        tree_item.setText(7, f"{detail_item.unit_price:,.2f}")
-        tree_item.setText(8, f"{detail_item.labor_unit_price:,.2f}")
-        tree_item.setText(9, f"{detail_item.material_unit_price:,.2f}")
-        tree_item.setText(10, f"{detail_item.material_loss_rate:,.2f}")
-        tree_item.setText(11, f"{detail_item.auxiliary_unit_price:,.2f}")
-        tree_item.setText(12, f"{detail_item.machine_unit_price:,.2f}")
-        tree_item.setText(13, f"{detail_item.other_unit_price:,.2f}")
-        tree_item.setText(14, f"{detail_item.total_price:,.2f}")
-        tree_item.setText(15, f"{detail_item.labor_total:,.2f}")
-        tree_item.setText(16, f"{detail_item.material_total:,.2f}")
-        tree_item.setText(17, f"{detail_item.auxiliary_total:,.2f}")
-        tree_item.setText(18, f"{detail_item.machine_total:,.2f}")
-        tree_item.setText(19, f"{detail_item.other_total:,.2f}")
-        tree_item.setText(20, f"{detail_item.management_total:,.2f}")
-        tree_item.setText(21, f"{detail_item.tax_total:,.2f}")
-        tree_item.setText(22, f"{detail_item.comprehensive_total:,.2f}")
+        
+        # 如果有子节点，父节点只显示合价，不显示工程量和单价
+        if children:
+            tree_item.setText(6, "")  # 工程量
+            tree_item.setText(7, "")  # 综合单价
+            tree_item.setText(8, "")  # 人工单价
+            tree_item.setText(9, "")  # 主材单价
+            tree_item.setText(10, "")  # 损耗率
+            tree_item.setText(11, "")  # 辅材单价
+            tree_item.setText(12, "")  # 机械单价
+            tree_item.setText(13, "")  # 其他单价
+        else:
+            # 叶子节点显示所有值
+            tree_item.setText(6, self._format_number(detail_item.quantity))
+            tree_item.setText(7, self._format_number(detail_item.unit_price))
+            tree_item.setText(8, self._format_number(detail_item.labor_unit_price))
+            tree_item.setText(9, self._format_number(detail_item.material_unit_price))
+            tree_item.setText(10, self._format_number(detail_item.material_loss_rate))
+            tree_item.setText(11, self._format_number(detail_item.auxiliary_unit_price))
+            tree_item.setText(12, self._format_number(detail_item.machine_unit_price))
+            tree_item.setText(13, self._format_number(detail_item.other_unit_price))
+        
+        # 所有节点都显示合价
+        tree_item.setText(14, self._format_number(detail_item.total_price))
+        tree_item.setText(15, self._format_number(detail_item.labor_total))
+        tree_item.setText(16, self._format_number(detail_item.material_total))
+        tree_item.setText(17, self._format_number(detail_item.auxiliary_total))
+        tree_item.setText(18, self._format_number(detail_item.machine_total))
+        tree_item.setText(19, self._format_number(detail_item.other_total))
+        tree_item.setText(20, self._format_number(detail_item.management_total))
+        tree_item.setText(21, self._format_number(detail_item.tax_total))
+        tree_item.setText(22, self._format_number(detail_item.comprehensive_total))
         tree_item.setText(23, detail_item.remark)
 
         # 存储数据
@@ -777,14 +929,44 @@ class BiddingDetailTab(QWidget):
             font = QFont("Microsoft YaHei", 10, QFont.Bold)
             for col in range(24):
                 tree_item.setFont(col, font)
-        
-        # 递归添加子节点
-        children = item_data.get('children', [])
-        for child_data in children:
-            self._add_tree_item_recursive(tree_item, child_data)
-        
-        if children:
-            tree_item.setExpanded(True)
+
+    def _calculate_parent_totals_from_tree(self, tree_item: QTreeWidgetItem, detail_item: DetailItem):
+        """从树形控件计算父级节点的汇总值"""
+        total_price = 0.0
+        labor_total = 0.0
+        material_total = 0.0
+        auxiliary_total = 0.0
+        machine_total = 0.0
+        other_total = 0.0
+        management_total = 0.0
+        tax_total = 0.0
+        comprehensive_total = 0.0
+
+        # 累加所有子节点的值
+        for i in range(tree_item.childCount()):
+            child_item = tree_item.child(i)
+            child_data = child_item.data(0, Qt.UserRole)
+            if child_data:
+                total_price += child_data.total_price
+                labor_total += child_data.labor_total
+                material_total += child_data.material_total
+                auxiliary_total += child_data.auxiliary_total
+                machine_total += child_data.machine_total
+                other_total += child_data.other_total
+                management_total += child_data.management_total
+                tax_total += child_data.tax_total
+                comprehensive_total += child_data.comprehensive_total
+
+        # 更新父级节点的值
+        detail_item.total_price = total_price
+        detail_item.labor_total = labor_total
+        detail_item.material_total = material_total
+        detail_item.auxiliary_total = auxiliary_total
+        detail_item.machine_total = machine_total
+        detail_item.other_total = other_total
+        detail_item.management_total = management_total
+        detail_item.tax_total = tax_total
+        detail_item.comprehensive_total = comprehensive_total
 
     def build_tree_from_imported_data(self, data: list):
         """从导入的数据构建树形结构 - 带进度显示"""
@@ -845,64 +1027,157 @@ class BiddingDetailTab(QWidget):
             detail_item.auxiliary_unit_price = float(item_data.get('auxiliary_unit_price', 0))
             detail_item.machine_unit_price = float(item_data.get('machine_unit_price', 0))
             detail_item.other_unit_price = float(item_data.get('other_unit_price', 0))
-            detail_item.total_price = float(item_data.get('total_price', 0))
-            detail_item.labor_total = float(item_data.get('labor_total', 0))
-            detail_item.material_total = float(item_data.get('material_total', 0))
-            detail_item.auxiliary_total = float(item_data.get('auxiliary_total', 0))
-            detail_item.machine_total = float(item_data.get('machine_total', 0))
-            detail_item.other_total = float(item_data.get('other_total', 0))
-            detail_item.management_total = float(item_data.get('management_total', 0))
-            detail_item.tax_total = float(item_data.get('tax_total', 0))
-            detail_item.comprehensive_total = float(item_data.get('comprehensive_total', 0))
             detail_item.remark = str(item_data.get('remark', ''))
             detail_item.level = level
             
-            tree_item.setText(0, "")  # 缩进列（空）
+            # 调试输出
+            print(f"[构建树调试] name={detail_item.name}, quantity={detail_item.quantity}, unit_price={detail_item.unit_price}")
+            
+            # 计算合价
+            detail_item.calculate_total()
+            
+            # 设置基本文本信息
+            tree_item.setText(0, "")
             tree_item.setText(1, detail_item.sequence)
             tree_item.setText(2, detail_item.name)
             tree_item.setText(3, detail_item.specification)
-            tree_item.setText(4, detail_item.description)  # 项目特征描述
+            tree_item.setText(4, detail_item.description)
             tree_item.setText(5, detail_item.unit)
-            tree_item.setText(6, f"{detail_item.quantity:,.2f}")
-            tree_item.setText(7, f"{detail_item.unit_price:,.2f}")
-            tree_item.setText(8, f"{detail_item.labor_unit_price:,.2f}")
-            tree_item.setText(9, f"{detail_item.material_unit_price:,.2f}")
-            tree_item.setText(10, f"{detail_item.material_loss_rate:,.2f}")
-            tree_item.setText(11, f"{detail_item.auxiliary_unit_price:,.2f}")
-            tree_item.setText(12, f"{detail_item.machine_unit_price:,.2f}")
-            tree_item.setText(13, f"{detail_item.other_unit_price:,.2f}")
-            tree_item.setText(14, f"{detail_item.total_price:,.2f}")
-            tree_item.setText(15, f"{detail_item.labor_total:,.2f}")
-            tree_item.setText(16, f"{detail_item.material_total:,.2f}")
-            tree_item.setText(17, f"{detail_item.auxiliary_total:,.2f}")
-            tree_item.setText(18, f"{detail_item.machine_total:,.2f}")
-            tree_item.setText(19, f"{detail_item.other_total:,.2f}")
-            tree_item.setText(20, f"{detail_item.management_total:,.2f}")
-            tree_item.setText(21, f"{detail_item.tax_total:,.2f}")
-            tree_item.setText(22, f"{detail_item.comprehensive_total:,.2f}")
             tree_item.setText(23, detail_item.remark)
-
+            
+            # 设置工程量和单价显示
+            tree_item.setText(6, self._format_number(detail_item.quantity))
+            tree_item.setText(7, self._format_number(detail_item.unit_price))
+            tree_item.setText(8, self._format_number(detail_item.labor_unit_price))
+            tree_item.setText(9, self._format_number(detail_item.material_unit_price))
+            tree_item.setText(10, self._format_number(detail_item.material_loss_rate))
+            tree_item.setText(11, self._format_number(detail_item.auxiliary_unit_price))
+            tree_item.setText(12, self._format_number(detail_item.machine_unit_price))
+            tree_item.setText(13, self._format_number(detail_item.other_unit_price))
+            tree_item.setText(14, self._format_number(detail_item.total_price))
+            tree_item.setText(15, self._format_number(detail_item.labor_total))
+            tree_item.setText(16, self._format_number(detail_item.material_total))
+            tree_item.setText(17, self._format_number(detail_item.auxiliary_total))
+            tree_item.setText(18, self._format_number(detail_item.machine_total))
+            tree_item.setText(19, self._format_number(detail_item.other_total))
+            tree_item.setText(20, self._format_number(detail_item.management_total))
+            tree_item.setText(21, self._format_number(detail_item.tax_total))
+            tree_item.setText(22, self._format_number(detail_item.comprehensive_total))
+            
+            # 存储数据
             tree_item.setData(0, Qt.UserRole, detail_item)
-
-            tree_item.setTextAlignment(1, Qt.AlignCenter)  # 序号列居中
-            for col in range(6, 23):  # 数值列右对齐
+            
+            # 设置对齐
+            tree_item.setTextAlignment(1, Qt.AlignCenter)
+            for col in range(6, 23):
                 tree_item.setTextAlignment(col, Qt.AlignRight | Qt.AlignVCenter)
-
+            
+            # 一级节点加粗
             if level == 1:
                 font = QFont("Microsoft YaHei", 10, QFont.Bold)
                 for col in range(24):
                     tree_item.setFont(col, font)
             
-            if parent_tree_item:
-                parent_tree_item.setExpanded(True)
-            
             stack.append((level, tree_item))
         
         progress.setValue(len(data))
         progress.close()
-        
+
+        # 计算父级节点的汇总值（从叶子节点向上汇总）
+        self._update_all_tree_items_display_with_calc()
+
         self.detail_tree.expandAll()
         self.calculate_total()
+
+    def _update_all_tree_items_display(self):
+        """更新所有树节点的显示（从叶子节点开始向上更新）"""
+        self._update_all_tree_items_display_with_calc()
+
+    def _update_all_tree_items_display_with_calc(self):
+        """更新所有树节点的显示，并计算父级节点的汇总值（从叶子节点开始向上更新）"""
+        def update_item_display(item: QTreeWidgetItem):
+            # 先递归处理子节点
+            for i in range(item.childCount()):
+                update_item_display(item.child(i))
+            
+            # 更新当前节点的显示
+            detail_item = item.data(0, Qt.UserRole)
+            if detail_item:
+                print(f"[更新显示] {detail_item.name}, childCount={item.childCount()}")
+                print(f"[更新显示]   quantity={detail_item.quantity}, unit_price={detail_item.unit_price}")
+                print(f"[更新显示]   total_price={detail_item.total_price}, labor_total={detail_item.labor_total}")
+                # 如果有子节点，计算汇总值并只显示合价
+                if item.childCount() > 0:
+                    # 计算父级节点的汇总值
+                    total_price = 0.0
+                    labor_total = 0.0
+                    material_total = 0.0
+                    auxiliary_total = 0.0
+                    machine_total = 0.0
+                    other_total = 0.0
+                    management_total = 0.0
+                    tax_total = 0.0
+                    comprehensive_total = 0.0
+                    
+                    for i in range(item.childCount()):
+                        child_item = item.child(i)
+                        child_data = child_item.data(0, Qt.UserRole)
+                        if child_data:
+                            total_price += child_data.total_price
+                            labor_total += child_data.labor_total
+                            material_total += child_data.material_total
+                            auxiliary_total += child_data.auxiliary_total
+                            machine_total += child_data.machine_total
+                            other_total += child_data.other_total
+                            management_total += child_data.management_total
+                            tax_total += child_data.tax_total
+                            comprehensive_total += child_data.comprehensive_total
+                    
+                    # 更新父节点的数据
+                    detail_item.total_price = total_price
+                    detail_item.labor_total = labor_total
+                    detail_item.material_total = material_total
+                    detail_item.auxiliary_total = auxiliary_total
+                    detail_item.machine_total = machine_total
+                    detail_item.other_total = other_total
+                    detail_item.management_total = management_total
+                    detail_item.tax_total = tax_total
+                    detail_item.comprehensive_total = comprehensive_total
+                    
+                    # 父节点只显示合价，不显示工程量和单价
+                    item.setText(6, "")  # 工程量
+                    item.setText(7, "")  # 综合单价
+                    item.setText(8, "")  # 人工单价
+                    item.setText(9, "")  # 主材单价
+                    item.setText(10, "")  # 损耗率
+                    item.setText(11, "")  # 辅材单价
+                    item.setText(12, "")  # 机械单价
+                    item.setText(13, "")  # 其他单价
+                else:
+                    # 叶子节点显示所有值
+                    item.setText(6, self._format_number(detail_item.quantity))
+                    item.setText(7, self._format_number(detail_item.unit_price))
+                    item.setText(8, self._format_number(detail_item.labor_unit_price))
+                    item.setText(9, self._format_number(detail_item.material_unit_price))
+                    item.setText(10, self._format_number(detail_item.material_loss_rate))
+                    item.setText(11, self._format_number(detail_item.auxiliary_unit_price))
+                    item.setText(12, self._format_number(detail_item.machine_unit_price))
+                    item.setText(13, self._format_number(detail_item.other_unit_price))
+                
+                # 所有节点都显示合价
+                item.setText(14, self._format_number(detail_item.total_price))
+                item.setText(15, self._format_number(detail_item.labor_total))
+                item.setText(16, self._format_number(detail_item.material_total))
+                item.setText(17, self._format_number(detail_item.auxiliary_total))
+                item.setText(18, self._format_number(detail_item.machine_total))
+                item.setText(19, self._format_number(detail_item.other_total))
+                item.setText(20, self._format_number(detail_item.management_total))
+                item.setText(21, self._format_number(detail_item.tax_total))
+                item.setText(22, self._format_number(detail_item.comprehensive_total))
+        
+        # 从顶层节点开始更新
+        for i in range(self.detail_tree.topLevelItemCount()):
+            update_item_display(self.detail_tree.topLevelItem(i))
 
     def on_import_excel(self):
         """导入Excel明细"""
@@ -924,7 +1199,145 @@ class BiddingDetailTab(QWidget):
             imported_data = dialog.get_imported_data()
             if imported_data:
                 self.build_tree_from_imported_data(imported_data)
-                MessageDialog.information(self, "成功", f"成功导入 {len(imported_data)} 条明细数据")
+                # 不再显示中间弹窗，进度条和成功提示已在导入对话框中完成
+
+    def on_export_excel(self):
+        """导出明细到Excel"""
+        if not self.current_bidding_id:
+            MessageDialog.warning(self, "提示", "请先选择投标")
+            return
+
+        # 收集所有节点数据
+        all_items_data = []
+
+        def collect_items(item: QTreeWidgetItem, level: int = 1):
+            detail_item = item.data(0, Qt.UserRole)
+            if detail_item:
+                item_data = {
+                    'level': level,
+                    'sequence': detail_item.sequence,
+                    'name': detail_item.name,
+                    'specification': detail_item.specification,
+                    'description': detail_item.description,
+                    'unit': detail_item.unit,
+                    'quantity': detail_item.quantity,
+                    'unit_price': detail_item.unit_price,
+                    'labor_unit_price': detail_item.labor_unit_price,
+                    'material_unit_price': detail_item.material_unit_price,
+                    'material_loss_rate': detail_item.material_loss_rate,
+                    'auxiliary_unit_price': detail_item.auxiliary_unit_price,
+                    'machine_unit_price': detail_item.machine_unit_price,
+                    'other_unit_price': detail_item.other_unit_price,
+                    'total_price': detail_item.total_price,
+                    'labor_total': detail_item.labor_total,
+                    'material_total': detail_item.material_total,
+                    'auxiliary_total': detail_item.auxiliary_total,
+                    'machine_total': detail_item.machine_total,
+                    'other_total': detail_item.other_total,
+                    'management_total': detail_item.management_total,
+                    'tax_total': detail_item.tax_total,
+                    'comprehensive_total': detail_item.comprehensive_total,
+                    'remark': detail_item.remark,
+                }
+                all_items_data.append(item_data)
+
+            # 递归处理子节点
+            for i in range(item.childCount()):
+                collect_items(item.child(i), level + 1)
+
+        # 从顶层节点开始收集
+        for i in range(self.detail_tree.topLevelItemCount()):
+            collect_items(self.detail_tree.topLevelItem(i))
+
+        if not all_items_data:
+            MessageDialog.warning(self, "提示", "没有数据可导出")
+            return
+
+        # 选择保存路径
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "导出Excel",
+            f"{self.current_bidding_name}_{self.current_summary_item.name if self.current_summary_item else '明细'}.xlsx",
+            "Excel Files (*.xlsx);;All Files (*)"
+        )
+
+        if not file_path:
+            return
+
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+
+            # 创建工作簿
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "投标明细"
+
+            # 定义表头
+            headers = ['序号', '分部分项工程名称', '规格型号', '项目特征描述', '单位',
+                      '工程量', '综合单价', '人工单价', '主材单价', '主材损耗率%',
+                      '辅材单价', '机械单价', '其他单价', '合价', '人工合价',
+                      '主材合价', '辅材合价', '机械合价', '其他合价', '管理费',
+                      '税金', '综合合价', '备注']
+
+            # 写入表头
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col, value=header)
+                cell.font = Font(bold=True, size=11)
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+                cell.fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+                cell.font = Font(bold=True, color='FFFFFF', size=11)
+
+            # 写入数据
+            for row_idx, item_data in enumerate(all_items_data, 2):
+                ws.cell(row=row_idx, column=1, value=item_data['sequence'])
+                ws.cell(row=row_idx, column=2, value=item_data['name'])
+                ws.cell(row=row_idx, column=3, value=item_data['specification'])
+                ws.cell(row=row_idx, column=4, value=item_data['description'])
+                ws.cell(row=row_idx, column=5, value=item_data['unit'])
+                ws.cell(row=row_idx, column=6, value=item_data['quantity'])
+                ws.cell(row=row_idx, column=7, value=item_data['unit_price'])
+                ws.cell(row=row_idx, column=8, value=item_data['labor_unit_price'])
+                ws.cell(row=row_idx, column=9, value=item_data['material_unit_price'])
+                ws.cell(row=row_idx, column=10, value=item_data['material_loss_rate'])
+                ws.cell(row=row_idx, column=11, value=item_data['auxiliary_unit_price'])
+                ws.cell(row=row_idx, column=12, value=item_data['machine_unit_price'])
+                ws.cell(row=row_idx, column=13, value=item_data['other_unit_price'])
+                ws.cell(row=row_idx, column=14, value=item_data['total_price'])
+                ws.cell(row=row_idx, column=15, value=item_data['labor_total'])
+                ws.cell(row=row_idx, column=16, value=item_data['material_total'])
+                ws.cell(row=row_idx, column=17, value=item_data['auxiliary_total'])
+                ws.cell(row=row_idx, column=18, value=item_data['machine_total'])
+                ws.cell(row=row_idx, column=19, value=item_data['other_total'])
+                ws.cell(row=row_idx, column=20, value=item_data['management_total'])
+                ws.cell(row=row_idx, column=21, value=item_data['tax_total'])
+                ws.cell(row=row_idx, column=22, value=item_data['comprehensive_total'])
+                ws.cell(row=row_idx, column=23, value=item_data['remark'])
+
+                # 设置数值格式和对齐
+                for col in range(6, 23):  # 数值列
+                    cell = ws.cell(row=row_idx, column=col)
+                    cell.number_format = '#,##0.00'
+                    cell.alignment = Alignment(horizontal='right', vertical='center')
+
+                # 序号列居中
+                ws.cell(row=row_idx, column=1).alignment = Alignment(horizontal='center', vertical='center')
+
+            # 调整列宽
+            ws.column_dimensions['A'].width = 10  # 序号
+            ws.column_dimensions['B'].width = 40  # 名称
+            ws.column_dimensions['C'].width = 20  # 规格型号
+            ws.column_dimensions['D'].width = 40  # 描述
+            ws.column_dimensions['E'].width = 10  # 单位
+            for col in ['F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W']:
+                ws.column_dimensions[col].width = 12
+
+            # 保存文件
+            wb.save(file_path)
+            MessageDialog.information(self, "成功", f"成功导出 {len(all_items_data)} 条明细数据到:\n{file_path}")
+
+        except Exception as e:
+            MessageDialog.error(self, "导出失败", f"导出Excel失败:\n{str(e)}")
 
     def reset_all_to_level_one(self):
         """将所有节点重置为级别1"""
@@ -1191,9 +1604,27 @@ class BiddingDetailTab(QWidget):
             if success:
                 self.current_detail_id = result
                 print(f"[保存明细] 保存成功，明细ID: {result}")
-                MessageDialog.information(self, "成功", f"明细数据保存成功（明细ID: {result}）")
-                # 通知父页面刷新汇总表
-                if self.parent_page and hasattr(self.parent_page, 'refresh_summary'):
+                
+                # 获取汇总表行信息和版本信息
+                summary_item_name = getattr(self.current_summary_item, 'name', '未知')
+                summary_item_code = getattr(self.current_summary_item, 'sequence', '')
+                version = detail.version or "V1.0"
+                
+                # 构建提示信息
+                item_info = f"{summary_item_code} {summary_item_name}" if summary_item_code else summary_item_name
+                MessageDialog.information(self, "保存成功", 
+                    f"明细数据保存成功\n"
+                    f"汇总项: {item_info}\n"
+                    f"版本: {version}\n"
+                    f"共 {len(detail.items)} 条明细记录")
+                
+                # 通知父页面刷新汇总表（带红色字体标记）
+                print(f"[保存明细] 准备刷新汇总表，parent_page={self.parent_page}")
+                if self.parent_page and hasattr(self.parent_page, 'refresh_summary_with_detail'):
+                    print(f"[保存明细] 调用 refresh_summary_with_detail")
+                    self.parent_page.refresh_summary_with_detail(self.current_summary_item)
+                elif self.parent_page and hasattr(self.parent_page, 'refresh_summary'):
+                    print(f"[保存明细] 调用 refresh_summary")
                     self.parent_page.refresh_summary()
             else:
                 print(f"[保存明细] 保存失败: {result}")
@@ -1398,31 +1829,141 @@ class BiddingDetailTab(QWidget):
         if column in [6, 7, 8, 9, 10, 11, 12, 13]:
             detail_item.calculate_total()
             # 更新所有合价列的显示
-            item.setText(14, f"{detail_item.total_price:,.2f}")
-            item.setText(15, f"{detail_item.labor_total:,.2f}")
-            item.setText(16, f"{detail_item.material_total:,.2f}")
-            item.setText(17, f"{detail_item.auxiliary_total:,.2f}")
-            item.setText(18, f"{detail_item.machine_total:,.2f}")
-            item.setText(19, f"{detail_item.other_total:,.2f}")
-            item.setText(22, f"{detail_item.comprehensive_total:,.2f}")
-        
+            item.setText(14, self._format_number(detail_item.total_price))
+            item.setText(15, self._format_number(detail_item.labor_total))
+            item.setText(16, self._format_number(detail_item.material_total))
+            item.setText(17, self._format_number(detail_item.auxiliary_total))
+            item.setText(18, self._format_number(detail_item.machine_total))
+            item.setText(19, self._format_number(detail_item.other_total))
+            item.setText(22, self._format_number(detail_item.comprehensive_total))
+
+            # 更新父级节点的汇总值
+            self._update_parent_totals(item)
+
         self.calculate_total()
 
+        # 触发自动保存（防抖，延迟500ms）
+        self._trigger_auto_save()
+
+    def _update_parent_totals(self, item: QTreeWidgetItem):
+        """更新父级节点的汇总值（向上递归）"""
+        parent_item = item.parent()
+        if not parent_item:
+            return
+        
+        # 获取父节点的数据
+        parent_data = parent_item.data(0, Qt.UserRole)
+        if not parent_data:
+            return
+        
+        # 重新计算父节点的汇总值
+        total_price = 0.0
+        labor_total = 0.0
+        material_total = 0.0
+        auxiliary_total = 0.0
+        machine_total = 0.0
+        other_total = 0.0
+        management_total = 0.0
+        tax_total = 0.0
+        comprehensive_total = 0.0
+        
+        # 累加所有子节点的值
+        for i in range(parent_item.childCount()):
+            child_item = parent_item.child(i)
+            child_data = child_item.data(0, Qt.UserRole)
+            if child_data:
+                total_price += child_data.total_price
+                labor_total += child_data.labor_total
+                material_total += child_data.material_total
+                auxiliary_total += child_data.auxiliary_total
+                machine_total += child_data.machine_total
+                other_total += child_data.other_total
+                management_total += child_data.management_total
+                tax_total += child_data.tax_total
+                comprehensive_total += child_data.comprehensive_total
+        
+        # 更新父节点的值
+        parent_data.total_price = total_price
+        parent_data.labor_total = labor_total
+        parent_data.material_total = material_total
+        parent_data.auxiliary_total = auxiliary_total
+        parent_data.machine_total = machine_total
+        parent_data.other_total = other_total
+        parent_data.management_total = management_total
+        parent_data.tax_total = tax_total
+        parent_data.comprehensive_total = comprehensive_total
+        
+        # 更新父节点的显示
+        parent_item.setText(14, self._format_number(total_price))
+        parent_item.setText(15, self._format_number(labor_total))
+        parent_item.setText(16, self._format_number(material_total))
+        parent_item.setText(17, self._format_number(auxiliary_total))
+        parent_item.setText(18, self._format_number(machine_total))
+        parent_item.setText(19, self._format_number(other_total))
+        parent_item.setText(20, self._format_number(management_total))
+        parent_item.setText(21, self._format_number(tax_total))
+        parent_item.setText(22, self._format_number(comprehensive_total))
+        
+        # 递归更新上级父节点
+        self._update_parent_totals(parent_item)
+
+    def _trigger_auto_save(self):
+        """触发自动保存（防抖）"""
+        if not self.current_bidding_id or not self.current_summary_item:
+            return
+
+        self._pending_save = True
+        # 重新启动定时器（500ms后保存）
+        self.auto_save_timer.stop()
+        self.auto_save_timer.start(500)
+
+    def _auto_save(self):
+        """执行自动保存"""
+        if not self._pending_save:
+            return
+
+        try:
+            # 收集数据
+            detail = self.collect_data_from_ui()
+            if not detail.items:
+                return
+
+            # 调试：打印第一个顶层节点的数据
+            if detail.items:
+                first_item = detail.items[0]
+                print(f"[自动保存调试] 第一个节点: {first_item.name}")
+                print(f"[自动保存调试]   total_price={first_item.total_price}, labor_total={first_item.labor_total}")
+                print(f"[自动保存调试]   子节点数: {len(first_item.children)}")
+                if first_item.children:
+                    for child in first_item.children:
+                        print(f"[自动保存调试]     子节点: {child.name}, total_price={child.total_price}")
+
+            # 保存到数据库（不显示成功提示，避免打扰用户）
+            success, result = self.detail_manager.save_detail(detail, update_summary=True)
+            if success:
+                self.current_detail_id = result
+                self._pending_save = False
+                print(f"[自动保存] 成功，明细ID: {result}")
+
+                # 通知父页面刷新汇总表
+                if self.parent_page and hasattr(self.parent_page, 'refresh_summary_with_detail'):
+                    self.parent_page.refresh_summary_with_detail(self.current_summary_item)
+            else:
+                print(f"[自动保存] 失败: {result}")
+        except Exception as e:
+            print(f"[自动保存] 异常: {e}")
+
     def calculate_total(self):
-        """计算总价"""
+        """计算总价 - 只累加顶层节点的合价（顶层节点已包含所有子节点的合价）"""
         total = 0.0
 
-        def sum_total(item: QTreeWidgetItem):
-            nonlocal total
-            detail_item = item.data(0, Qt.UserRole)
-            if detail_item and detail_item.level > 1:  # 只计算非一级节点
-                total += detail_item.total_price
-
-            for i in range(item.childCount()):
-                sum_total(item.child(i))
-
+        # 只累加顶层节点的 total_price
+        # 因为父节点的 total_price 已经通过 _calculate_parent_totals 计算为所有子节点的总和
         for i in range(self.detail_tree.topLevelItemCount()):
-            sum_total(self.detail_tree.topLevelItem(i))
+            item = self.detail_tree.topLevelItem(i)
+            detail_item = item.data(0, Qt.UserRole)
+            if detail_item:
+                total += detail_item.total_price
 
         self.total_label.setText(f"¥ {total:,.2f}")
         return total
@@ -1460,42 +2001,72 @@ class BiddingDetailTab(QWidget):
         self.detail_tree.collapseAll()
 
     def on_item_double_clicked(self, item: QTreeWidgetItem, column: int):
-        """双击单元格显示详情对话框"""
-        if column in [3, 4]:  # 规格型号列(3)或项目特征描述列(4)
-            from PySide6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QPushButton, QLabel
+        """双击单元格打开行编辑对话框"""
+        # 获取当前行的数据
+        detail_item = item.data(0, Qt.UserRole)
+        if not detail_item:
+            return
 
-            # 获取列标题和内容
-            header_text = self.detail_tree.headerItem().text(column)
-            content_text = item.text(column)
+        # 打开行编辑对话框
+        dialog = RowEditDialog(detail_item, self)
+        if dialog.exec() == QDialog.Accepted:
+            # 获取编辑后的数据
+            updated_data = dialog.get_updated_data()
 
-            if not content_text or len(content_text) <= 5:
-                return
+            # 更新数据模型
+            detail_item.sequence = updated_data['sequence']
+            detail_item.name = updated_data['name']
+            detail_item.specification = updated_data['specification']
+            detail_item.description = updated_data['description']
+            detail_item.unit = updated_data['unit']
+            detail_item.quantity = updated_data['quantity']
+            detail_item.unit_price = updated_data['unit_price']
+            detail_item.labor_unit_price = updated_data['labor_unit_price']
+            detail_item.material_unit_price = updated_data['material_unit_price']
+            detail_item.material_loss_rate = updated_data['material_loss_rate']
+            detail_item.auxiliary_unit_price = updated_data['auxiliary_unit_price']
+            detail_item.machine_unit_price = updated_data['machine_unit_price']
+            detail_item.other_unit_price = updated_data['other_unit_price']
 
-            # 创建对话框
-            dialog = QDialog(self)
-            dialog.setWindowTitle(f"{header_text} - 详情")
-            dialog.setMinimumSize(500, 300)
-            dialog.setObjectName("detailDialog")
+            # 重新计算合价
+            detail_item.calculate_total()
 
-            layout = QVBoxLayout(dialog)
+            # 更新树形控件显示
+            self._update_tree_item_display(item, detail_item)
 
-            # 标题标签
-            title_label = QLabel(f"📋 {header_text}")
-            layout.addWidget(title_label)
+            # 更新父级节点的汇总值
+            self._update_parent_totals(item)
 
-            # 内容文本框
-            text_edit = QTextEdit()
-            text_edit.setPlainText(content_text)
-            text_edit.setReadOnly(True)
-            text_edit.setLineWrapMode(QTextEdit.WidgetWidth)
-            layout.addWidget(text_edit)
+            # 更新总价
+            self.calculate_total()
 
-            # 关闭按钮
-            close_btn = QPushButton("关闭")
-            close_btn.clicked.connect(dialog.accept)
-            layout.addWidget(close_btn, alignment=Qt.AlignCenter)
+            # 触发自动保存
+            self._trigger_auto_save()
 
-            dialog.exec()
+    def _update_tree_item_display(self, tree_item: QTreeWidgetItem, detail_item: DetailItem):
+        """更新树节点的显示"""
+        tree_item.setText(1, detail_item.sequence)
+        tree_item.setText(2, detail_item.name)
+        tree_item.setText(3, detail_item.specification)
+        tree_item.setText(4, detail_item.description)
+        tree_item.setText(5, detail_item.unit)
+        tree_item.setText(6, self._format_number(detail_item.quantity))
+        tree_item.setText(7, self._format_number(detail_item.unit_price))
+        tree_item.setText(8, self._format_number(detail_item.labor_unit_price))
+        tree_item.setText(9, self._format_number(detail_item.material_unit_price))
+        tree_item.setText(10, self._format_number(detail_item.material_loss_rate))
+        tree_item.setText(11, self._format_number(detail_item.auxiliary_unit_price))
+        tree_item.setText(12, self._format_number(detail_item.machine_unit_price))
+        tree_item.setText(13, self._format_number(detail_item.other_unit_price))
+        tree_item.setText(14, self._format_number(detail_item.total_price))
+        tree_item.setText(15, self._format_number(detail_item.labor_total))
+        tree_item.setText(16, self._format_number(detail_item.material_total))
+        tree_item.setText(17, self._format_number(detail_item.auxiliary_total))
+        tree_item.setText(18, self._format_number(detail_item.machine_total))
+        tree_item.setText(19, self._format_number(detail_item.other_total))
+        tree_item.setText(20, self._format_number(detail_item.management_total))
+        tree_item.setText(21, self._format_number(detail_item.tax_total))
+        tree_item.setText(22, self._format_number(detail_item.comprehensive_total))
 
     def show_context_menu(self, position):
         """显示右键菜单"""
@@ -1679,3 +2250,132 @@ class BiddingDetailTab(QWidget):
                     parent.removeChild(item)
 
         self.calculate_total()
+
+
+class RowEditDialog(QDialog):
+    """行编辑对话框 - 编辑整行数据"""
+
+    def __init__(self, detail_item: DetailItem, parent=None):
+        super().__init__(parent)
+        self.detail_item = detail_item
+        self.setWindowTitle(f"编辑明细 - {detail_item.name}")
+        self.setMinimumSize(600, 500)
+        self.setup_ui()
+
+    def setup_ui(self):
+        """设置UI"""
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # 基本信息组
+        basic_group = QFrame()
+        basic_layout = QGridLayout(basic_group)
+        basic_layout.setSpacing(10)
+
+        # 序号
+        basic_layout.addWidget(QLabel("序号:"), 0, 0)
+        self.sequence_edit = QLineEdit(self.detail_item.sequence)
+        basic_layout.addWidget(self.sequence_edit, 0, 1)
+
+        # 名称
+        basic_layout.addWidget(QLabel("名称:"), 1, 0)
+        self.name_edit = QLineEdit(self.detail_item.name)
+        basic_layout.addWidget(self.name_edit, 1, 1)
+
+        # 规格型号
+        basic_layout.addWidget(QLabel("规格型号:"), 2, 0)
+        self.specification_edit = QLineEdit(self.detail_item.specification)
+        basic_layout.addWidget(self.specification_edit, 2, 1)
+
+        # 项目特征描述
+        basic_layout.addWidget(QLabel("项目特征描述:"), 3, 0)
+        self.description_edit = QTextEdit(self.detail_item.description)
+        self.description_edit.setMaximumHeight(80)
+        basic_layout.addWidget(self.description_edit, 3, 1)
+
+        # 单位
+        basic_layout.addWidget(QLabel("单位:"), 4, 0)
+        self.unit_edit = QLineEdit(self.detail_item.unit)
+        basic_layout.addWidget(self.unit_edit, 4, 1)
+
+        layout.addWidget(basic_group)
+
+        # 工程量和单价组
+        price_group = QFrame()
+        price_layout = QGridLayout(price_group)
+        price_layout.setSpacing(10)
+
+        # 工程量
+        price_layout.addWidget(QLabel("工程量:"), 0, 0)
+        self.quantity_edit = QLineEdit(str(self.detail_item.quantity))
+        price_layout.addWidget(self.quantity_edit, 0, 1)
+
+        # 综合单价
+        price_layout.addWidget(QLabel("综合单价:"), 1, 0)
+        self.unit_price_edit = QLineEdit(str(self.detail_item.unit_price))
+        price_layout.addWidget(self.unit_price_edit, 1, 1)
+
+        # 人工单价
+        price_layout.addWidget(QLabel("人工单价:"), 2, 0)
+        self.labor_unit_price_edit = QLineEdit(str(self.detail_item.labor_unit_price))
+        price_layout.addWidget(self.labor_unit_price_edit, 2, 1)
+
+        # 主材单价
+        price_layout.addWidget(QLabel("主材单价:"), 3, 0)
+        self.material_unit_price_edit = QLineEdit(str(self.detail_item.material_unit_price))
+        price_layout.addWidget(self.material_unit_price_edit, 3, 1)
+
+        # 主材损耗率
+        price_layout.addWidget(QLabel("主材损耗率(%)"), 4, 0)
+        self.material_loss_rate_edit = QLineEdit(str(self.detail_item.material_loss_rate))
+        price_layout.addWidget(self.material_loss_rate_edit, 4, 1)
+
+        # 辅材单价
+        price_layout.addWidget(QLabel("辅材单价:"), 5, 0)
+        self.auxiliary_unit_price_edit = QLineEdit(str(self.detail_item.auxiliary_unit_price))
+        price_layout.addWidget(self.auxiliary_unit_price_edit, 5, 1)
+
+        # 机械单价
+        price_layout.addWidget(QLabel("机械单价:"), 6, 0)
+        self.machine_unit_price_edit = QLineEdit(str(self.detail_item.machine_unit_price))
+        price_layout.addWidget(self.machine_unit_price_edit, 6, 1)
+
+        # 其他单价
+        price_layout.addWidget(QLabel("其他单价:"), 7, 0)
+        self.other_unit_price_edit = QLineEdit(str(self.detail_item.other_unit_price))
+        price_layout.addWidget(self.other_unit_price_edit, 7, 1)
+
+        layout.addWidget(price_group)
+
+        # 按钮
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        ok_btn = PrimaryPushButton("确定")
+        ok_btn.clicked.connect(self.accept)
+        button_layout.addWidget(ok_btn)
+
+        cancel_btn = PushButton("取消")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+
+        layout.addLayout(button_layout)
+
+    def get_updated_data(self) -> dict:
+        """获取更新后的数据"""
+        return {
+            'sequence': self.sequence_edit.text(),
+            'name': self.name_edit.text(),
+            'specification': self.specification_edit.text(),
+            'description': self.description_edit.toPlainText(),
+            'unit': self.unit_edit.text(),
+            'quantity': float(self.quantity_edit.text() or 0),
+            'unit_price': float(self.unit_price_edit.text() or 0),
+            'labor_unit_price': float(self.labor_unit_price_edit.text() or 0),
+            'material_unit_price': float(self.material_unit_price_edit.text() or 0),
+            'material_loss_rate': float(self.material_loss_rate_edit.text() or 0),
+            'auxiliary_unit_price': float(self.auxiliary_unit_price_edit.text() or 0),
+            'machine_unit_price': float(self.machine_unit_price_edit.text() or 0),
+            'other_unit_price': float(self.other_unit_price_edit.text() or 0),
+        }

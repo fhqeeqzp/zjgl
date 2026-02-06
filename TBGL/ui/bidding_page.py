@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui.message_dialog import MessageDialog
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QAction
 
 from ..logic.bidding_manager import BiddingManager
@@ -322,6 +322,15 @@ class BiddingPage(QFrame):
             project_item_name,
             summary_item
         )
+
+    def refresh_summary_with_detail(self, summary_item):
+        """刷新汇总表，并将包含明细的汇总行标记为红色"""
+        print(f"[refresh_summary_with_detail] 开始执行")
+
+        # 重新加载汇总表数据，确保所有有明细的行都被正确标记
+        if self.current_bidding_id:
+            print(f"[refresh_summary_with_detail] 重新加载汇总表数据")
+            self.summary_tab.load_bidding_data(self.current_bidding_id)
 
     # ==================== 事件处理 ====================
 

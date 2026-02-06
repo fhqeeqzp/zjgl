@@ -856,6 +856,7 @@ class BiddingManager:
                 parent_id INT DEFAULT NULL COMMENT '父节点ID',
                 sequence VARCHAR(50) COMMENT '序号',
                 name VARCHAR(500) COMMENT '分部分项工程名称',
+                specification VARCHAR(500) COMMENT '规格型号',
                 description VARCHAR(1000) COMMENT '项目特征描述',
                 unit VARCHAR(50) COMMENT '单位',
                 quantity DECIMAL(15, 4) DEFAULT 0 COMMENT '工程量',
@@ -882,10 +883,38 @@ class BiddingManager:
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='投标明细项目表'
             """
             self.db_manager.execute_update(sql_items)
+            
+            # 检查并添加缺失的字段
+            self._check_and_add_missing_columns()
+            
             return True
         except Exception as e:
             print(f"创建明细表失败: {e}")
             return False
+    
+    def _check_and_add_missing_columns(self):
+        """检查并添加缺失的数据库字段"""
+        try:
+            # 检查 bidding_detail_items 表是否有 specification 字段
+            check_sql = """
+            SELECT COUNT(*) as count 
+            FROM information_schema.columns 
+            WHERE table_name = 'bidding_detail_items' 
+            AND column_name = 'specification'
+            AND table_schema = DATABASE()
+            """
+            result = self.db_manager.execute_query(check_sql)
+            
+            if result and result[0]['count'] == 0:
+                # 添加 specification 字段
+                alter_sql = """
+                ALTER TABLE bidding_detail_items 
+                ADD COLUMN specification VARCHAR(500) COMMENT '规格型号' AFTER name
+                """
+                self.db_manager.execute_update(alter_sql)
+                print("✓ 自动添加字段: bidding_detail_items.specification")
+        except Exception as e:
+            print(f"检查/添加字段失败: {e}")
     
     def save_bidding_detail(self, bidding_id: int, summary_item_id: int, items: List[Dict],
                            version: str = "V1.0", created_by: str = "", remark: str = "") -> tuple:
@@ -925,23 +954,41 @@ class BiddingManager:
             for idx, item in enumerate(items):
                 parent_temp_id = item.get('parent_temp_id')
                 parent_db_id = id_mapping.get(parent_temp_id) if parent_temp_id else None
-                
+
                 sql_item = """
                 INSERT INTO bidding_detail_items
-                (detail_id, parent_id, sequence, name, description, unit, quantity,
-                 unit_price, total_price, remark, sort_order)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (detail_id, parent_id, sequence, name, specification, description, unit, quantity,
+                 unit_price, total_price, labor_price, main_material_price, main_material_loss_rate,
+                 aux_material_price, machinery_price, other_price, labor_total, material_total,
+                 auxiliary_total, machine_total, other_total, management_total, tax_total,
+                 comprehensive_total, remark, sort_order)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 params = (
                     detail_id,
                     parent_db_id,
                     item.get('sequence', ''),
                     item.get('name', ''),
+                    item.get('specification', ''),
                     item.get('description', ''),
                     item.get('unit', ''),
                     item.get('quantity', 0),
                     item.get('unit_price', 0),
                     item.get('total_price', 0),
+                    item.get('labor_price', 0),
+                    item.get('main_material_price', 0),
+                    item.get('main_material_loss_rate', 0),
+                    item.get('aux_material_price', 0),
+                    item.get('machinery_price', 0),
+                    item.get('other_price', 0),
+                    item.get('labor_total', 0),
+                    item.get('material_total', 0),
+                    item.get('auxiliary_total', 0),
+                    item.get('machine_total', 0),
+                    item.get('other_total', 0),
+                    item.get('management_total', 0),
+                    item.get('tax_total', 0),
+                    item.get('comprehensive_total', 0),
                     item.get('remark', ''),
                     idx
                 )
@@ -1013,7 +1060,7 @@ class BiddingManager:
         """
         if not self.db_manager:
             return False, "数据库未连接"
-        
+
         try:
             self.db_manager.execute_update(
                 "DELETE FROM bidding_details WHERE id = %s",
@@ -1022,3 +1069,23 @@ class BiddingManager:
             return True, "删除成功"
         except Exception as e:
             return False, f"删除失败: {e}"
+
+    def get_summary_item_ids_with_detail(self, bidding_id: int) -> List[int]:
+        """
+        获取指定投标下所有有明细的汇总项ID列表
+        :param bidding_id: 投标ID
+        :return: 有明细的汇总项ID列表
+        """
+        if not self.db_manager:
+            return []
+
+        try:
+            sql = """
+            SELECT DISTINCT summary_item_id FROM bidding_details
+            WHERE bidding_id = %s AND summary_item_id IS NOT NULL
+            """
+            result = self.db_manager.execute_query(sql, (bidding_id,))
+            return [row['summary_item_id'] for row in result if row['summary_item_id']]
+        except Exception as e:
+            print(f"获取有明细的汇总项ID失败: {e}")
+            return []

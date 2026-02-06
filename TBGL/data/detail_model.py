@@ -34,6 +34,7 @@ class DetailItem:
     # 显示信息
     sequence: str = ""           # 序号
     name: str = ""               # 分部分项工程名称
+    specification: str = ""      # 规格型号
     description: str = ""        # 项目特征描述
     unit: str = ""               # 单位
     
@@ -184,20 +185,19 @@ class BiddingDetail:
         
         def accumulate(item: DetailItem):
             """递归累加"""
-            if item.children:
-                # 有子节点，递归处理子节点
-                for child in item.children:
-                    accumulate(child)
-            else:
-                # 叶子节点，累加数值
-                summary['quote_price'] += item.total_price
-                summary['labor_fee'] += item.labor_total
-                summary['main_material_fee'] += item.material_total
-                summary['aux_material_fee'] += item.auxiliary_total
-                summary['machinery_fee'] += item.machine_total
-                summary['other_fee'] += item.other_total
-                summary['management_fee'] += item.management_total
-                summary['tax_fee'] += item.tax_total
+            # 累加当前节点的值
+            summary['quote_price'] += item.total_price
+            summary['labor_fee'] += item.labor_total
+            summary['main_material_fee'] += item.material_total
+            summary['aux_material_fee'] += item.auxiliary_total
+            summary['machinery_fee'] += item.machine_total
+            summary['other_fee'] += item.other_total
+            summary['management_fee'] += item.management_total
+            summary['tax_fee'] += item.tax_total
+            
+            # 递归处理子节点
+            for child in item.children:
+                accumulate(child)
         
         for item in self.items:
             accumulate(item)
@@ -215,12 +215,14 @@ class BiddingDetail:
         for item in flat_items:
             if item.parent_id is None:
                 # 根节点
+                item.level = 1
                 self.items.append(item)
             else:
                 # 子节点
                 parent = item_map.get(item.parent_id)
                 if parent:
                     parent.children.append(item)
+                    item.level = parent.level + 1
         
         # 按sort_order排序
         self.items.sort(key=lambda x: x.sort_order)

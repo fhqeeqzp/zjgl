@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS bidding_detail_items (
     parent_id INT DEFAULT NULL COMMENT '父节点ID',
     sequence VARCHAR(50) COMMENT '序号',
     name VARCHAR(500) COMMENT '分部分项工程名称',
+    specification VARCHAR(500) COMMENT '规格型号',
     description VARCHAR(1000) COMMENT '项目特征描述',
     unit VARCHAR(50) COMMENT '单位',
     quantity DECIMAL(15, 4) DEFAULT 0 COMMENT '工程量',

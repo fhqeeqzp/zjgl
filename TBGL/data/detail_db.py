@@ -71,10 +71,38 @@ class DetailDatabase:
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='投标明细项目表'
             """
             self.db.execute_update(sql_items)
+            
+            # 检查并添加缺失的字段
+            self._check_and_add_missing_columns()
+            
             return True
         except Exception as e:
             print(f"创建明细表失败: {e}")
             return False
+    
+    def _check_and_add_missing_columns(self):
+        """检查并添加缺失的数据库字段"""
+        try:
+            # 检查 bidding_detail_items 表是否有 specification 字段
+            check_sql = """
+            SELECT COUNT(*) as count 
+            FROM information_schema.columns 
+            WHERE table_name = 'bidding_detail_items' 
+            AND column_name = 'specification'
+            AND table_schema = DATABASE()
+            """
+            result = self.db.execute_query(check_sql)
+            
+            if result and result[0]['count'] == 0:
+                # 添加 specification 字段
+                alter_sql = """
+                ALTER TABLE bidding_detail_items 
+                ADD COLUMN specification VARCHAR(500) COMMENT '规格型号' AFTER name
+                """
+                self.db.execute_update(alter_sql)
+                print("✓ 自动添加字段: bidding_detail_items.specification")
+        except Exception as e:
+            print(f"检查/添加字段失败: {e}")
     
     def insert(self, detail: BiddingDetail) -> BiddingDetail:
         """插入明细主表记录"""
@@ -202,6 +230,7 @@ class DetailDatabase:
                 parent_id=row['parent_id'],
                 sequence=row['sequence'] or '',
                 name=row['name'] or '',
+                specification=row.get('specification') or '',
                 description=row['description'] or '',
                 unit=row['unit'] or '',
                 quantity=float(row['quantity'] or 0),
@@ -235,18 +264,19 @@ class DetailDatabase:
         """插入明细项目"""
         sql = """
         INSERT INTO bidding_detail_items
-        (detail_id, parent_id, sequence, name, description, unit, quantity,
+        (detail_id, parent_id, sequence, name, specification, description, unit, quantity,
          unit_price, total_price, labor_price, main_material_price, main_material_loss_rate,
          aux_material_price, machinery_price, other_price, labor_total, material_total,
          auxiliary_total, machine_total, other_total, management_total, tax_total,
          comprehensive_total, remark, sort_order)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         params = (
             item.detail_id,
             item.parent_id,
             item.sequence,
             item.name,
+            item.specification,
             item.description,
             item.unit,
             item.quantity,
@@ -282,7 +312,7 @@ class DetailDatabase:
         """更新明细项目"""
         sql = """
         UPDATE bidding_detail_items
-        SET sequence = %s, name = %s, description = %s, unit = %s, quantity = %s,
+        SET sequence = %s, name = %s, specification = %s, description = %s, unit = %s, quantity = %s,
             unit_price = %s, total_price = %s, labor_price = %s, main_material_price = %s,
             main_material_loss_rate = %s, aux_material_price = %s, machinery_price = %s,
             other_price = %s, labor_total = %s, material_total = %s, auxiliary_total = %s,
@@ -291,7 +321,7 @@ class DetailDatabase:
         WHERE id = %s
         """
         params = (
-            item.sequence, item.name, item.description, item.unit, item.quantity,
+            item.sequence, item.name, item.specification, item.description, item.unit, item.quantity,
             item.unit_price, item.total_price, item.labor_price, item.main_material_price,
             item.main_material_loss_rate, item.aux_material_price, item.machinery_price,
             item.other_price, item.labor_total, item.material_total, item.auxiliary_total,
@@ -334,3 +364,12 @@ class DetailDatabase:
         """
         result = self.db.execute_query(sql, (bidding_id, summary_item_id))
         return [row['version'] for row in result]
+
+    def get_summary_item_ids_with_detail(self, bidding_id: int) -> List[int]:
+        """获取指定投标下所有有明细的汇总项ID列表"""
+        sql = """
+        SELECT DISTINCT summary_item_id FROM bidding_details 
+        WHERE bidding_id = %s AND summary_item_id IS NOT NULL
+        """
+        result = self.db.execute_query(sql, (bidding_id,))
+        return [row['summary_item_id'] for row in result if row['summary_item_id']]

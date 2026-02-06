@@ -36,6 +36,8 @@ from PySide6.QtGui import QFont, QColor, QAction
 
 from ui.fluent_widgets import PushButton, PrimaryPushButton
 from ..data.summary_model import SummaryItem, SummaryItemType, SummaryTemplate
+from ..data.link_db import DataLinkDatabase
+from ..logic.detail_manager import DetailManager
 from .excel_import_dialog import ExcelImportDialog, ExcelFileSelector
 
 
@@ -107,6 +109,14 @@ class BiddingSummaryTab(QWidget):
         self.collapse_btn = PushButton("📁 折叠")
         self.collapse_btn.clicked.connect(self.collapse_all)
         tree_toolbar.addWidget(self.collapse_btn)
+
+        tree_toolbar.addSpacing(20)
+
+        # 数据关联按钮
+        self.data_link_btn = PushButton("🔗 数据关联")
+        self.data_link_btn.setToolTip("可视化关联汇总表和明细表数据")
+        self.data_link_btn.clicked.connect(self.on_data_link)
+        tree_toolbar.addWidget(self.data_link_btn)
 
         tree_toolbar.addStretch()
 
@@ -551,7 +561,7 @@ class BiddingSummaryTab(QWidget):
             self.bidding_combo.addItem(display_text, bidding.id)
 
     def on_bidding_selected(self, bidding_id: int, bidding_code: str = None):
-        """从父页面接收选中的投标"""
+        """从父页面接收选中的投标 - 自动加载最后版本汇总表数据"""
         if bidding_id:
             self.current_bidding_id = bidding_id
             self.current_bidding_code = bidding_code
@@ -569,6 +579,43 @@ class BiddingSummaryTab(QWidget):
             # 更新Excel文件选择器目录
             excel_dir = self.get_excel_directory()
             self.excel_selector.set_directory(excel_dir)
+            
+            # 自动加载最后版本的汇总表数据
+            self.load_last_version_summary(bidding_id)
+
+    def load_last_version_summary(self, bidding_id: int):
+        """加载最后版本的汇总表数据 - 如果没有版本则清空显示"""
+        # 获取所有版本
+        versions = self.bidding_manager.get_summary_versions(bidding_id)
+        
+        if versions:
+            # 有版本，加载最后一个版本（最新的）
+            last_version = versions[0]  # 假设按时间倒序排列
+            version_id = last_version.get('id')
+            version_code = last_version.get('version', 'V1.0')
+            
+            # 加载该版本的数据
+            items = self.bidding_manager.get_bidding_summary_by_id(version_id)
+            if items:
+                self.build_tree_from_db_data(items)
+                # 更新版本下拉框
+                self.load_version_combo()
+                # 选中最后一个版本
+                for i in range(self.version_combo.count()):
+                    if self.version_combo.itemData(i) == version_id:
+                        self.version_combo.setCurrentIndex(i)
+                        break
+            else:
+                # 版本存在但没有数据，清空显示
+                self.summary_tree.clear()
+                self.load_default_template()
+        else:
+            # 没有版本，清空显示并加载默认模板（空表状态）
+            self.summary_tree.clear()
+            self.load_default_template()
+            # 清空版本下拉框
+            self.version_combo.clear()
+            self.version_combo.addItem("无版本", None)
 
     def load_bidding_data(self, bidding_id: int):
         """加载投标汇总数据 - 优先从数据库加载，如果没有则加载默认模板"""
@@ -578,11 +625,47 @@ class BiddingSummaryTab(QWidget):
         if items:
             # 从数据库加载成功
             self.build_tree_from_db_data(items)
+            # 标记有明细的汇总行
+            self._mark_items_with_detail(bidding_id)
             # print(f"从数据库加载了 {len(items)} 条汇总数据")
         else:
             # 数据库中没有数据，加载默认模板
             # print("数据库中没有数据，加载默认模板")
             self.load_default_template()
+
+    def _mark_items_with_detail(self, bidding_id: int):
+        """标记有明细的汇总行（红色字体）"""
+        # 获取有明细的汇总项ID列表
+        summary_item_ids = self.bidding_manager.get_summary_item_ids_with_detail(bidding_id)
+        if not summary_item_ids:
+            return
+
+        # 遍历树形控件，标记有明细的行
+        def traverse_and_mark(parent_item=None):
+            if parent_item is None:
+                # 从顶层节点开始
+                for i in range(self.summary_tree.topLevelItemCount()):
+                    item = self.summary_tree.topLevelItem(i)
+                    self._check_and_mark_item(item, summary_item_ids)
+                    traverse_and_mark(item)
+            else:
+                # 遍历子节点
+                for i in range(parent_item.childCount()):
+                    item = parent_item.child(i)
+                    self._check_and_mark_item(item, summary_item_ids)
+                    traverse_and_mark(item)
+
+        traverse_and_mark()
+
+    def _check_and_mark_item(self, tree_item, summary_item_ids: list):
+        """检查并标记单个树项"""
+        item_data = tree_item.data(0, Qt.UserRole)
+        if not item_data:
+            return
+
+        item_id = getattr(item_data, 'id', None)
+        if item_id and item_id in summary_item_ids:
+            self._set_item_red_font(tree_item)
 
     def on_import_excel(self):
         """导入Excel"""
@@ -1345,6 +1428,397 @@ class BiddingSummaryTab(QWidget):
         item.setText(2, f"{summary_item.quote_price:,.2f}")
         self.calculate_total()
 
+    def on_data_link(self):
+        """打开数据关联对话框"""
+        if not self.current_bidding_id:
+            MessageDialog.warning(self, "提示", "请先选择投标")
+            return
+
+        # 收集汇总表数据
+        summary_items = self._collect_tree_data(self.summary_tree)
+
+        if not summary_items:
+            MessageDialog.warning(self, "提示", "汇总表数据为空，无法建立关联")
+            return
+
+        # 收集明细表数据（从数据库加载所有有明细数据的汇总项）
+        detail_items = self._load_all_detail_items()
+
+        if not detail_items:
+            MessageDialog.warning(self, "提示", "明细表数据为空，请先导入明细数据")
+            return
+
+        # 加载已保存的关联关系
+        existing_links = self._load_data_links()
+
+        # 打开数据关联对话框
+        from .data_link_dialog import DataLinkDialog
+        dialog = DataLinkDialog(summary_items, detail_items, existing_links, self)
+
+        if dialog.exec() == QDialog.Accepted:
+            # 获取关联关系
+            links = dialog.get_links()
+            print(f"[数据关联] 建立了 {len(links)} 对关联")
+
+            # 保存关联关系到数据库
+            self._save_data_links(links)
+
+            MessageDialog.information(
+                self,
+                "关联完成",
+                f"成功建立 {len(links)} 对数据关联"
+            )
+
+    def _get_current_summary_version(self) -> str:
+        """获取当前汇总表版本号"""
+        current_version_text = self.version_combo.currentText()
+        if not current_version_text or current_version_text == "无版本":
+            return "V1.0"
+        # 从文本中提取版本号，格式如 "V1.0 - 初始版本"
+        version = current_version_text.split(' - ')[0] if ' - ' in current_version_text else current_version_text
+        return version
+
+    def _save_data_links(self, links: dict):
+        """保存关联关系到数据库"""
+        if not self.current_bidding_id:
+            return
+
+        # 从 parent_page 获取 db_manager
+        db_manager = None
+        if self.parent_page and hasattr(self.parent_page, 'bidding_manager'):
+            db_manager = self.parent_page.bidding_manager.db_manager
+
+        if not db_manager:
+            print("[数据关联] 错误：无法获取数据库连接")
+            return
+
+        # 获取当前版本号
+        summary_version = self._get_current_summary_version()
+        print(f"[数据关联] 当前汇总表版本: {summary_version}")
+
+        # 创建 DataLinkDatabase 实例
+        link_db = DataLinkDatabase(db_manager)
+
+        # 初始化表（如果不存在）
+        link_db.init_tables()
+
+        # 保存关联关系（带版本信息）
+        success = link_db.save_links(self.current_bidding_id, links, summary_version)
+        if success:
+            print(f"[数据关联] 成功保存 {len(links)} 对关联到数据库（版本: {summary_version}）")
+            # 根据关联关系更新汇总表数据
+            self._update_summary_from_links(links)
+        else:
+            print("[数据关联] 保存关联关系失败")
+
+    def _update_summary_from_links(self, links: dict):
+        """根据关联关系更新汇总表数据"""
+        if not links:
+            return
+
+        print(f"[数据关联] 开始更新汇总表数据，关联数: {len(links)}")
+
+        # 从 parent_page 获取 db_manager
+        db_manager = None
+        if self.parent_page and hasattr(self.parent_page, 'bidding_manager'):
+            db_manager = self.parent_page.bidding_manager.db_manager
+
+        if not db_manager:
+            print("[数据关联] 错误：无法获取数据库连接")
+            return
+
+        # 创建 DetailManager 实例
+        detail_manager = DetailManager(db_manager)
+
+        # 遍历所有关联，计算明细合价并更新汇总表
+        for summary_item_id, detail_item_id in links.items():
+            try:
+                print(f"[数据关联] 处理关联: 汇总项 {summary_item_id} -> 明细项 {detail_item_id}")
+
+                # 获取汇总项对应的明细数据
+                detail = detail_manager.get_detail_by_summary_item(
+                    self.current_bidding_id, summary_item_id
+                )
+
+                if not detail:
+                    print(f"[数据关联] 警告: 汇总项 {summary_item_id} 没有对应的明细数据")
+                    continue
+
+                if not detail.items:
+                    print(f"[数据关联] 警告: 汇总项 {summary_item_id} 的明细数据为空")
+                    continue
+
+                print(f"[数据关联] 汇总项 {summary_item_id} 有 {len(detail.items)} 个明细根项")
+
+                # 在明细项中查找关联的明细项及其子项
+                total_price = self._calculate_linked_detail_total(
+                    detail.items, detail_item_id
+                )
+
+                print(f"[数据关联] 计算得到的合价: {total_price}")
+
+                if total_price > 0:
+                    # 更新汇总表的报价
+                    self._update_summary_item_price(summary_item_id, total_price)
+                    print(f"[数据关联] 更新汇总项 {summary_item_id} 的报价为 {total_price}")
+                else:
+                    print(f"[数据关联] 警告: 汇总项 {summary_item_id} 的计算合价为0，不更新")
+
+            except Exception as e:
+                print(f"[数据关联] 更新汇总项 {summary_item_id} 失败: {e}")
+                import traceback
+                traceback.print_exc()
+
+        # 刷新汇总表显示
+        self.refresh_summary_display()
+
+    def _calculate_linked_detail_total(self, detail_items, linked_detail_id) -> float:
+        """计算关联明细项及其子项的合价总和"""
+        total = 0.0
+        found = False
+
+        def find_and_sum(items, target_id):
+            nonlocal total, found
+            for item in items:
+                if item.id == target_id:
+                    # 找到目标项，累加其合价
+                    total += item.total_price
+                    print(f"[数据关联] 找到明细项 {target_id}, 合价: {item.total_price}")
+                    # 累加所有子项的合价
+                    if item.children:
+                        for child in item.children:
+                            total += child.total_price
+                            print(f"[数据关联] 累加子项 {child.id}, 合价: {child.total_price}")
+                            # 递归累加孙项
+                            if child.children:
+                                sum_children_recursive(child.children)
+                    found = True
+                    return True
+                # 递归查找子项
+                if item.children:
+                    if find_and_sum(item.children, target_id):
+                        return True
+            return False
+
+        def sum_children_recursive(children):
+            """递归累加所有子项的合价"""
+            nonlocal total
+            for child in children:
+                total += child.total_price
+                print(f"[数据关联] 累加孙项 {child.id}, 合价: {child.total_price}")
+                if child.children:
+                    sum_children_recursive(child.children)
+
+        find_and_sum(detail_items, linked_detail_id)
+
+        if not found:
+            print(f"[数据关联] 警告: 未找到明细项 {linked_detail_id}")
+
+        return total
+
+    def _update_summary_item_price(self, summary_item_id: int, total_price: float):
+        """更新汇总表项目的报价"""
+        def update_tree_item(tree_item):
+            data_obj = tree_item.data(0, Qt.UserRole)
+            if data_obj and hasattr(data_obj, 'id') and data_obj.id == summary_item_id:
+                # 更新报价
+                data_obj.quote_price = total_price
+                # 更新显示
+                tree_item.setText(2, f"{total_price:,.2f}")
+                return True
+
+            # 递归处理子节点
+            for i in range(tree_item.childCount()):
+                if update_tree_item(tree_item.child(i)):
+                    return True
+            return False
+
+        # 遍历顶层节点
+        for i in range(self.summary_tree.topLevelItemCount()):
+            if update_tree_item(self.summary_tree.topLevelItem(i)):
+                break
+
+    def refresh_summary_display(self):
+        """刷新汇总表显示"""
+        # 重新计算总价
+        self.calculate_total()
+
+    def _load_data_links(self) -> dict:
+        """从数据库加载关联关系"""
+        if not self.current_bidding_id:
+            return {}
+
+        # 从 parent_page 获取 db_manager
+        db_manager = None
+        if self.parent_page and hasattr(self.parent_page, 'bidding_manager'):
+            db_manager = self.parent_page.bidding_manager.db_manager
+
+        if not db_manager:
+            return {}
+
+        # 获取当前版本号
+        summary_version = self._get_current_summary_version()
+
+        # 创建 DataLinkDatabase 实例
+        link_db = DataLinkDatabase(db_manager)
+
+        # 加载关联关系（带版本信息）
+        links = link_db.get_links_by_bidding(self.current_bidding_id, summary_version)
+        print(f"[数据关联] 从数据库加载了 {len(links)} 对关联（版本: {summary_version}）")
+        return links
+
+    def _load_all_detail_items(self):
+        """从数据库加载所有明细数据"""
+        detail_items = []
+
+        # 获取所有汇总项ID
+        summary_ids = self._get_all_summary_item_ids()
+        print(f"[数据关联] 找到 {len(summary_ids)} 个汇总项")
+
+        if not summary_ids:
+            return detail_items
+
+        # 从 parent_page 获取 db_manager
+        db_manager = None
+        if self.parent_page and hasattr(self.parent_page, 'bidding_manager'):
+            db_manager = self.parent_page.bidding_manager.db_manager
+
+        if not db_manager:
+            print("[数据关联] 错误：无法获取数据库连接")
+            return detail_items
+
+        # 创建 DetailManager 实例，传入 db_manager
+        detail_manager = DetailManager(db_manager)
+
+        # 遍历所有汇总项，获取对应的明细数据
+        for summary_id in summary_ids:
+            try:
+                detail = detail_manager.get_detail_by_summary_item(
+                    self.current_bidding_id, summary_id
+                )
+                if detail and detail.items:
+                    print(f"[数据关联] 汇总项 {summary_id} 有 {len(detail.items)} 个明细项")
+                    # 将明细数据转换为字典格式
+                    for item in detail.items:
+                        detail_dict = self._detail_item_to_dict(item)
+                        if detail_dict:
+                            detail_items.append(detail_dict)
+                else:
+                    print(f"[数据关联] 汇总项 {summary_id} 没有明细数据")
+            except Exception as e:
+                print(f"[数据关联] 加载汇总项 {summary_id} 的明细数据失败: {e}")
+
+        print(f"[数据关联] 总共加载 {len(detail_items)} 个明细项")
+        return detail_items
+
+    def _get_all_summary_item_ids(self):
+        """获取所有汇总项的ID"""
+        ids = []
+
+        def collect_ids(tree_item):
+            data_obj = tree_item.data(0, Qt.UserRole)
+            if data_obj and hasattr(data_obj, 'id'):
+                ids.append(data_obj.id)
+
+            # 递归处理子节点
+            for i in range(tree_item.childCount()):
+                collect_ids(tree_item.child(i))
+
+        # 遍历顶层节点
+        for i in range(self.summary_tree.topLevelItemCount()):
+            collect_ids(self.summary_tree.topLevelItem(i))
+
+        return ids
+
+    def _detail_item_to_dict(self, item):
+        """将 DetailItem 转换为字典"""
+        if not item:
+            return None
+
+        result = {
+            'id': item.id,
+            'name': item.name,
+            'sequence': item.sequence,
+            'level': item.level,
+            'children': []
+        }
+
+        # 递归处理子节点
+        if item.children:
+            for child in item.children:
+                child_dict = self._detail_item_to_dict(child)
+                if child_dict:
+                    result['children'].append(child_dict)
+
+        return result
+
+    def _collect_tree_data(self, tree_widget):
+        """将树形控件数据转换为字典列表"""
+        items = []
+
+        def convert_item(tree_item):
+            # 从 SummaryItem/DetailItem 对象获取数据
+            data_obj = tree_item.data(0, Qt.UserRole)
+
+            # 获取级别
+            level = 1
+            if hasattr(data_obj, 'level'):
+                level = data_obj.level
+            elif hasattr(data_obj, 'item_type'):
+                # SummaryItem 使用 item_type 判断级别
+                if data_obj.item_type.value == 'category':
+                    level = 1
+                elif data_obj.item_type.value == 'subcategory':
+                    level = 2
+                else:
+                    level = 3
+
+            # 判断是汇总表还是明细表
+            header_text = tree_item.treeWidget().headerItem().text(0)
+            is_summary = header_text == '工程项目及费用名称'
+            is_detail = header_text == ''
+
+            if is_summary:
+                # 汇总表：列0是名称，列1是序号
+                item_data = {
+                    'id': getattr(data_obj, 'id', None),
+                    'name': tree_item.text(0),
+                    'sequence': tree_item.text(1),
+                    'level': level,
+                    'children': []
+                }
+            elif is_detail:
+                # 明细表：列0是空，列1是序号，列2是名称
+                item_data = {
+                    'id': getattr(data_obj, 'id', None),
+                    'sequence': tree_item.text(1),
+                    'name': tree_item.text(2),
+                    'level': level,
+                    'children': []
+                }
+            else:
+                # 默认
+                item_data = {
+                    'id': getattr(data_obj, 'id', None),
+                    'name': tree_item.text(0),
+                    'sequence': tree_item.text(1) if tree_item.treeWidget().columnCount() > 1 else '',
+                    'level': level,
+                    'children': []
+                }
+
+            # 递归处理子节点
+            for i in range(tree_item.childCount()):
+                child_data = convert_item(tree_item.child(i))
+                item_data['children'].append(child_data)
+
+            return item_data
+
+        # 遍历顶层节点
+        for i in range(tree_widget.topLevelItemCount()):
+            items.append(convert_item(tree_widget.topLevelItem(i)))
+
+        return items
+
     def on_item_double_clicked(self, item: QTreeWidgetItem, column: int):
         """节点双击事件 - 跳转到投标明细页签"""
         summary_item = item.data(0, Qt.UserRole)
@@ -1499,6 +1973,10 @@ class BiddingSummaryTab(QWidget):
         # 获取当前版本ID
         current_version_id = self.version_combo.currentData()
         
+        # 获取当前版本信息
+        current_version_id = self.version_combo.currentData()
+        current_version_text = self.version_combo.currentText()
+        
         if current_version_id:
             # 更新当前版本
             success, result = self.bidding_manager.update_bidding_summary(
@@ -1506,13 +1984,17 @@ class BiddingSummaryTab(QWidget):
                 items_data
             )
             if success:
-                MessageDialog.information(self, "成功", f"当前版本已更新\n共 {len(items_data)} 条记录")
+                version_code = current_version_text.split(' - ')[0] if ' - ' in current_version_text else current_version_text
+                MessageDialog.information(self, "保存成功", 
+                    f"汇总表数据已保存\n"
+                    f"版本: {version_code}\n"
+                    f"共 {len(items_data)} 条记录")
                 # 刷新版本列表显示
                 self.load_version_combo()
             else:
                 MessageDialog.critical(self, "错误", f"更新失败:\n{result}")
         else:
-            # 没有当前版本，创建新版本
+            # 没有当前版本，自动创建V1.0版本
             version = "V1.0"
             version_name = "初始版本"
             
@@ -1526,7 +2008,10 @@ class BiddingSummaryTab(QWidget):
             )
             
             if success:
-                MessageDialog.information(self, "成功", f"新版本已创建\n共 {len(items_data)} 条记录")
+                MessageDialog.information(self, "保存成功", 
+                    f"汇总表数据已保存\n"
+                    f"版本: {version}（自动创建）\n"
+                    f"共 {len(items_data)} 条记录")
                 # 刷新版本列表并选中新版本
                 self.load_version_combo()
                 for i in range(self.version_combo.count()):
@@ -1535,3 +2020,85 @@ class BiddingSummaryTab(QWidget):
                         break
             else:
                 MessageDialog.critical(self, "错误", f"保存失败:\n{result}")
+
+    def mark_item_with_detail(self, summary_item):
+        """标记包含明细的汇总行为红色字体"""
+        if not summary_item:
+            print("[标记红色] summary_item 为空")
+            return
+        
+        # 获取汇总项的ID或名称用于匹配
+        target_id = getattr(summary_item, 'id', None)
+        target_name = getattr(summary_item, 'name', '')
+        target_sequence = getattr(summary_item, 'sequence', '')
+        print(f"[标记红色] 目标: id={target_id}, name={target_name}, sequence={target_sequence}")
+        
+        # 遍历树形控件查找匹配的项
+        print(f"[标记红色] 开始遍历树，顶层节点数: {self.summary_tree.topLevelItemCount()}")
+        found = False
+        
+        def find_and_mark_item(parent_item=None):
+            nonlocal found
+            if parent_item is None:
+                # 从顶层节点开始
+                for i in range(self.summary_tree.topLevelItemCount()):
+                    item = self.summary_tree.topLevelItem(i)
+                    item_data = item.data(0, Qt.UserRole)
+                    if item_data:
+                        print(f"[标记红色] 检查顶层节点: {getattr(item_data, 'name', 'unknown')}")
+                    if self._is_matching_item(item, target_id, target_name, target_sequence):
+                        print(f"[标记红色] 找到匹配项，设置红色字体")
+                        self._set_item_red_font(item)
+                        found = True
+                        return True
+                    # 递归查找子节点
+                    if find_and_mark_item(item):
+                        return True
+            else:
+                # 查找子节点
+                for i in range(parent_item.childCount()):
+                    item = parent_item.child(i)
+                    if self._is_matching_item(item, target_id, target_name, target_sequence):
+                        print(f"[标记红色] 找到匹配项（子节点），设置红色字体")
+                        self._set_item_red_font(item)
+                        found = True
+                        return True
+                    # 递归查找子节点
+                    if find_and_mark_item(item):
+                        return True
+            return False
+        
+        find_and_mark_item()
+        if not found:
+            print(f"[标记红色] 未找到匹配项")
+    
+    def _is_matching_item(self, tree_item, target_id, target_name, target_sequence):
+        """检查树项是否匹配目标汇总项"""
+        item_data = tree_item.data(0, Qt.UserRole)
+        if not item_data:
+            return False
+        
+        # 优先使用ID匹配
+        if target_id and hasattr(item_data, 'id') and item_data.id == target_id:
+            print(f"[匹配成功] ID匹配: {target_id}")
+            return True
+        
+        # 使用名称和序号匹配
+        item_name = getattr(item_data, 'name', '')
+        item_sequence = getattr(item_data, 'sequence', '')
+        
+        matched = item_name == target_name and item_sequence == target_sequence
+        if matched:
+            print(f"[匹配成功] 名称序号匹配: {target_sequence} {target_name}")
+        return matched
+    
+    def _set_item_red_font(self, tree_item):
+        """设置树项为红色字体"""
+        from PySide6.QtGui import QColor
+        red_font = QFont("Microsoft YaHei", 10)
+        red_font.setBold(True)
+        
+        # 设置所有列为红色字体
+        for col in range(self.summary_tree.columnCount()):
+            tree_item.setForeground(col, QColor("#FF0000"))
+            tree_item.setFont(col, red_font)

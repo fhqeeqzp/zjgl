@@ -126,22 +126,65 @@ class DetailManager:
             item.detail_id = detail_id
             item.parent_id = parent_id
             item.sort_order = start_order + idx
-            
-            # 确保各项合价已计算
-            item.calculate_totals()
-            
-            # 保存当前项目
-            saved_item = self.db.insert_item(item)
-            
-            if saved_item.id:
-                count += 1
-                # 递归保存子节点
-                if item.children:
+
+            # 先递归保存子节点（确保子节点的ID已生成）
+            if item.children:
+                # 先保存当前项目（父节点），获取ID
+                saved_item = self.db.insert_item(item)
+                if saved_item.id:
+                    count += 1
+                    # 递归保存子节点
                     count += self._save_items_recursive(
                         detail_id, item.children, saved_item.id, 0
                     )
+                    # 子节点保存完成后，重新计算父节点的汇总值
+                    self._calculate_parent_totals(item)
+                    # 更新父节点的合价值到数据库
+                    self.db.update_item(item)
+            else:
+                # 叶子节点：计算合价并保存
+                item.calculate_totals()
+                saved_item = self.db.insert_item(item)
+                if saved_item.id:
+                    count += 1
         
         return count
+    
+    def _calculate_parent_totals(self, parent_item: DetailItem):
+        """计算父级节点的汇总值（从子节点汇总）"""
+        # 重置汇总值
+        total_price = 0.0
+        labor_total = 0.0
+        material_total = 0.0
+        auxiliary_total = 0.0
+        machine_total = 0.0
+        other_total = 0.0
+        management_total = 0.0
+        tax_total = 0.0
+        comprehensive_total = 0.0
+        
+        # 累加所有子节点的值
+        for child in parent_item.children:
+            total_price += child.total_price
+            labor_total += child.labor_total
+            material_total += child.material_total
+            auxiliary_total += child.auxiliary_total
+            machine_total += child.machine_total
+            other_total += child.other_total
+            management_total += child.management_total
+            tax_total += child.tax_total
+            comprehensive_total += child.comprehensive_total
+        
+        # 更新父节点的值
+        parent_item.total_price = total_price
+        parent_item.labor_total = labor_total
+        parent_item.material_total = material_total
+        parent_item.auxiliary_total = auxiliary_total
+        parent_item.machine_total = machine_total
+        parent_item.other_total = other_total
+        parent_item.management_total = management_total
+        parent_item.tax_total = tax_total
+        parent_item.comprehensive_total = comprehensive_total
     
     def _update_summary_item(self, summary_item_id: int, summary_data: dict):
         """
@@ -255,18 +298,19 @@ class DetailManager:
         
         def accumulate(item: DetailItem):
             """递归累加"""
-            if item.children:
-                for child in item.children:
-                    accumulate(child)
-            else:
-                summary['quote_price'] += item.total_price
-                summary['labor_fee'] += item.labor_total
-                summary['main_material_fee'] += item.material_total
-                summary['aux_material_fee'] += item.auxiliary_total
-                summary['machinery_fee'] += item.machine_total
-                summary['other_fee'] += item.other_total
-                summary['management_fee'] += item.management_total
-                summary['tax_fee'] += item.tax_total
+            # 累加当前节点的值
+            summary['quote_price'] += item.total_price
+            summary['labor_fee'] += item.labor_total
+            summary['main_material_fee'] += item.material_total
+            summary['aux_material_fee'] += item.auxiliary_total
+            summary['machinery_fee'] += item.machine_total
+            summary['other_fee'] += item.other_total
+            summary['management_fee'] += item.management_total
+            summary['tax_fee'] += item.tax_total
+            
+            # 递归处理子节点
+            for child in item.children:
+                accumulate(child)
         
         for item in items:
             accumulate(item)

@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QStyledItemDelegate, QStyleOptionViewItem,
     QStyle
 )
-from PySide6.QtCore import Qt, Signal, QThread, QSize
+from PySide6.QtCore import Qt, Signal, QThread, QSize, QTimer
 from PySide6.QtGui import QFont, QColor, QBrush, QIcon, QPixmap, QPainter
 
 from ui.message_dialog import MessageDialog
@@ -626,6 +626,19 @@ class VisualImportDialog(QDialog):
         else:
             self.status_label.setText(f"✓ 列映射已更新，已识别 {len(self.column_mappings)} 列，请继续设置项目名称列")
     
+    def auto_detect_columns_and_rows(self):
+        """自动识别列和行（组合操作）"""
+        if not self.preview_rows:
+            return
+        
+        # 1. 自动识别列
+        self.auto_detect_columns()
+        
+        # 2. 如果列识别成功，自动识别行
+        if self.column_detection_done:
+            self.auto_detect_rows()
+            self.status_label.setText(f"✓ 自动识别完成：已识别 {len([r for r in self.row_types.values() if r != RowType.UNKNOWN and r != RowType.INVALID])} 行有效数据")
+    
     def auto_detect_columns(self):
         """自动识别列映射 - 支持多行表头"""
         if not self.preview_rows:
@@ -724,22 +737,31 @@ class VisualImportDialog(QDialog):
     
     def _update_column_mappings_from_header(self):
         """根据识别的表头更新列映射"""
+        print(f"[列识别调试] 表头: {self.headers}")
+        
         for field_key, field_name, is_required, keywords in self.FIELD_DEFINITIONS:
             best_col = None
             best_score = 0.0
             
             for col_idx, header in enumerate(self.headers):
-                header_text = str(header).lower()
+                header_text = str(header).lower().replace(' ', '').replace('\u3000', '')  # 移除空格和全角空格
                 for keyword in keywords:
-                    keyword_lower = keyword.lower()
+                    keyword_lower = keyword.lower().replace(' ', '')
                     if keyword_lower in header_text:
-                        score = len(keyword_lower) / len(header_text) if header_text else 0
+                        # 完全匹配时给高分
+                        if keyword_lower == header_text:
+                            score = 1.0
+                        else:
+                            score = len(keyword_lower) / len(header_text) if header_text else 0
                         if score > best_score:
                             best_score = score
                             best_col = col_idx
             
-            if best_col is not None and best_score > 0.3:
+            if best_col is not None and best_score > 0.1:  # 降低阈值
                 self.column_mappings[field_key] = best_col
+                print(f"[列识别调试] {field_key} -> 列{best_col} (分数: {best_score:.2f})")
+        
+        print(f"[列识别调试] 最终映射: {self.column_mappings}")
         
         # 更新列映射显示
         max_cols = max(len(row) for row in self.preview_rows) if self.preview_rows else 0
@@ -1235,8 +1257,11 @@ class VisualImportDialog(QDialog):
         self.update_preview_table()
         
         self.progress_bar.hide()
-        self.status_label.setText(f"✓ 已加载 {row_count} 行数据，请先点击'自动识别列'")
+        self.status_label.setText(f"✓ 已加载 {row_count} 行数据，正在自动识别...")
         self.import_btn.setEnabled(True)
+        
+        # 自动识别列和行
+        QTimer.singleShot(100, self.auto_detect_columns_and_rows)
         
         if self.load_worker:
             self.load_worker.stop()
@@ -1254,22 +1279,39 @@ class VisualImportDialog(QDialog):
             self.load_worker = None
     
     def on_import(self):
-        """确认导入"""
-        # 收集要导入的数据
-        imported_items = []
-        
+        """确认导入 - 带进度显示"""
         # 获取列映射
         name_col = self.column_mappings.get('name')
         if name_col is None:
             MessageDialog.warning(self, "提示", "请先设置项目名称列映射")
             return
         
-        # 遍历所有行，导入清单行和分部行
+        # 创建进度对话框
+        from PySide6.QtWidgets import QProgressDialog
+        progress = QProgressDialog("正在处理导入数据...", "取消", 0, len(self.preview_rows), self)
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setWindowTitle("导入进度")
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+        progress.setMinimumSize(500, 150)
+        
+        # 收集要导入的数据
+        imported_items = []
         current_division = None
         current_item = None
         merge_buffer = []
         
         for row_idx, row_data in enumerate(self.preview_rows):
+            # 更新进度
+            if row_idx % 10 == 0:
+                progress.setValue(row_idx)
+                progress.setLabelText(f"正在处理导入数据... ({row_idx}/{len(self.preview_rows)})")
+                QApplication.processEvents()
+                
+                if progress.wasCanceled():
+                    progress.close()
+                    return
+            
             row_type = self.row_types.get(row_idx, RowType.UNKNOWN)
             
             # 跳过无效行
@@ -1292,7 +1334,6 @@ class VisualImportDialog(QDialog):
             elif row_type == RowType.ITEM:
                 # 清单行 - 先处理之前的合并行
                 if merge_buffer and current_item:
-                    # 将合并行内容附加到上一个清单行
                     self._apply_merge_rows(current_item, merge_buffer)
 
                 # 清单行的级别 = 当前分部级 + 1（如果没有分部则为1）
@@ -1312,6 +1353,9 @@ class VisualImportDialog(QDialog):
         # 处理最后的合并行
         if merge_buffer and current_item:
             self._apply_merge_rows(current_item, merge_buffer)
+        
+        progress.setValue(len(self.preview_rows))
+        progress.close()
 
         # 使用汇总项名称创建顶级行（level 0）作为所有内容的父级
         if self.summary_name and imported_items:
@@ -1351,12 +1395,38 @@ class VisualImportDialog(QDialog):
         # 存储导入的数据
         self._imported_data = imported_items
 
-        MessageDialog.information(self, "导入成功", f"成功导入 {len(imported_items)} 条数据")
+        # 显示成功提示
+        MessageDialog.information(self, "导入成功", f"成功导入 {len(imported_items)} 条明细数据")
         self.accept()
     
     def _extract_row_data(self, row_data: List) -> Dict:
         """从行数据中提取字段值"""
-        item_data = {}
+        # 初始化所有字段的默认值
+        item_data = {
+            'sequence': '',
+            'name': '',
+            'specification': '',
+            'description': '',
+            'unit': '',
+            'quantity': 0.0,
+            'unit_price': 0.0,
+            'labor_unit_price': 0.0,
+            'material_unit_price': 0.0,
+            'material_loss_rate': 0.0,
+            'auxiliary_unit_price': 0.0,
+            'machine_unit_price': 0.0,
+            'other_unit_price': 0.0,
+            'total_price': 0.0,
+            'labor_total': 0.0,
+            'material_total': 0.0,
+            'auxiliary_total': 0.0,
+            'machine_total': 0.0,
+            'other_total': 0.0,
+            'management_total': 0.0,
+            'tax_total': 0.0,
+            'comprehensive_total': 0.0,
+            'remark': '',
+        }
         
         for field_key, col_idx in self.column_mappings.items():
             if col_idx < len(row_data):
@@ -1368,19 +1438,13 @@ class VisualImportDialog(QDialog):
                                 'auxiliary_unit_price', 'machine_unit_price', 'other_unit_price']
                 if field_key in numeric_fields:
                     try:
-                        value = float(value) if value is not None else 0.0
+                        value = float(value) if value is not None and str(value).strip() != '' else 0.0
                     except (ValueError, TypeError):
                         value = 0.0
                 else:
                     value = str(value).strip() if value is not None else ""
                 
                 item_data[field_key] = value
-            else:
-                # 默认值
-                if field_key in ['quantity', 'unit_price']:
-                    item_data[field_key] = 0.0
-                else:
-                    item_data[field_key] = ""
         
         return item_data
     
